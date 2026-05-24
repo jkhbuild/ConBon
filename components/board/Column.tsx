@@ -7,6 +7,7 @@ import {
 } from "@dnd-kit/sortable";
 import { Card, type CardData } from "./Card";
 import { CardContextMenu } from "./CardContextMenu";
+import { NewCardButton } from "./NewCardButton";
 
 // Column — the Layout A presentation: a vertical lane per assignee
 // plus a Backlog lane on the left. The whole column is a drop zone
@@ -19,6 +20,8 @@ type ColumnProps = {
   // use the Person id. The Board's onDragEnd handler translates this
   // back to `assigneeId | null`.
   columnId: string;
+  // null = Backlog, used as cards.create assigneeId for the column's "+" button
+  assigneeId: string | null;
   title: string;
   subtitle: string;
   avatarColor: string;
@@ -28,6 +31,7 @@ type ColumnProps = {
 
 export function Column({
   columnId,
+  assigneeId,
   title,
   subtitle,
   avatarColor,
@@ -55,6 +59,7 @@ export function Column({
           <div style={{ fontSize: 11, color: "var(--ink-3)" }}>{subtitle}</div>
         </div>
         <div className="col-sub">{cards.length}</div>
+        <NewCardButton assigneeId={assigneeId} />
       </div>
       <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
         <div className="col-body">

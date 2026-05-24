@@ -3,7 +3,12 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc/client";
-import { useOpenCardId, useUIStore } from "@/stores/uiStore";
+import {
+  CREATING_NONE,
+  useCreatingForAssigneeId,
+  useOpenCardId,
+  useUIStore,
+} from "@/stores/uiStore";
 import type { CardData } from "./Card";
 import {
   effectivePriority,
@@ -14,14 +19,20 @@ import {
 import { useOptimisticListMutation } from "@/lib/hooks/useOptimisticListMutation";
 
 // CardEditModal — Radix Dialog port of reference/prototype/app.jsx
-// TaskModal. Opens when openCardId is non-null; reads the card from the
-// existing cards.list query (no separate cards.byId), writes through
-// cards.update with an optimistic patch on the same list. "Delete" in
-// the prototype becomes "Archive" — the card disappears from /active
-// and surfaces on /archive (Block F) with a Restore action.
+// TaskModal. Drives two flows:
+//
+//   Edit mode (uiStore.openCardId is set): reads the card from the
+//   existing cards.list cache, writes via cards.update with an
+//   optimistic patch on cards.list. Archive button is visible.
+//
+//   Create mode (uiStore.creatingForAssigneeId is set, possibly null
+//   for Backlog): empty defaults seeded into the draft, save calls
+//   cards.create then invalidates cards.list (no optimistic insert —
+//   that would require client-side temp IDs to swap on success).
+//   Archive button hidden.
 //
 // Radix gives us focus trap, scroll lock, Escape-to-close,
-// click-outside-to-close, and focus restoration on close for free.
+// click-outside-to-close, and focus restoration on close.
 
 const TASK_TYPE_LABELS: Record<"ESTIMATE" | "SCHEDULE" | "OTHER", string> = {
   ESTIMATE: "Estimate",
@@ -63,16 +74,32 @@ function toDateInput(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+function addDays(d: Date, n: number): Date {
+  const out = new Date(d);
+  out.setDate(out.getDate() + n);
+  return out;
+}
+
 export function CardEditModal() {
   const openCardId = useOpenCardId();
+  const creatingForAssigneeId = useCreatingForAssigneeId();
   const closeCard = useUIStore((s) => s.closeCard);
+  const closeNewCard = useUIStore((s) => s.closeNewCard);
   const utils = trpc.useUtils();
 
   const { data: cards } = trpc.cards.list.useQuery();
   const { data: people = [] } = trpc.people.list.useQuery();
   const { data: contracts = [] } = trpc.contracts.list.useQuery();
 
-  const card = cards?.find((c) => c.id === openCardId) ?? null;
+  const editingCard = openCardId
+    ? (cards?.find((c) => c.id === openCardId) ?? null)
+    : null;
+  const isCreating = creatingForAssigneeId !== CREATING_NONE;
+  const mode: "edit" | "create" | null = isCreating
+    ? "create"
+    : editingCard
+      ? "edit"
+      : null;
 
   const updateMutation = trpc.cards.update.useMutation(
     useOptimisticListMutation<UpdateInput, CardData>(
@@ -120,69 +147,127 @@ export function CardEditModal() {
     ),
   );
 
+  // cards.create has no optimistic patch — the new row needs a real cuid
+  // before it can join cards.list, and round-tripping a temp ID + swap
+  // pattern would dwarf the actual mutation logic at this scale. The
+  // refetch on settle reconciles the cache (typically <50ms locally).
+  const createMutation = trpc.cards.create.useMutation({
+    onSettled: () => {
+      void utils.cards.list.invalidate();
+    },
+  });
+
   const [draft, setDraft] = useState<DraftState | null>(null);
 
-  // Seed the draft when a different card is opened. We deliberately
-  // depend only on `openCardId` (not `card`) — re-seeding on each
-  // optimistic patch would clobber the user's in-progress edits.
+  // Seed the draft when the modal opens. For edit, depend on openCardId.
+  // For create, depend on creatingForAssigneeId + a snapshot of contracts
+  // (we need at least one contract to pick a default). Re-seeding on
+  // every cards.list patch would clobber in-progress user edits.
   useEffect(() => {
-    if (!card) {
+    if (mode === "edit" && editingCard) {
+      setDraft({
+        title: editingCard.title,
+        contractId: editingCard.contractId,
+        type: editingCard.type as TaskType,
+        assigneeId: editingCard.assigneeId,
+        assignmentDate: toDateInput(editingCard.assignmentDate),
+        dueDate: toDateInput(editingCard.dueDate),
+        priorityOverride: editingCard.priorityOverride,
+        blockerNote: editingCard.blockerNote ?? "",
+      });
+    } else if (mode === "create" && contracts.length > 0) {
+      const today = new Date();
+      setDraft({
+        title: "",
+        contractId: contracts[0].id,
+        type: "ESTIMATE",
+        assigneeId:
+          creatingForAssigneeId === CREATING_NONE
+            ? null
+            : creatingForAssigneeId,
+        assignmentDate: toDateInput(today),
+        dueDate: toDateInput(addDays(today, 14)),
+        priorityOverride: null,
+        blockerNote: "",
+      });
+    } else {
       setDraft(null);
-      return;
     }
-    setDraft({
-      title: card.title,
-      contractId: card.contractId,
-      type: card.type as TaskType,
-      assigneeId: card.assigneeId,
-      assignmentDate: toDateInput(card.assignmentDate),
-      dueDate: toDateInput(card.dueDate),
-      priorityOverride: card.priorityOverride,
-      blockerNote: card.blockerNote ?? "",
-    });
-    // Intentionally only reacting to openCardId — re-seeding the draft
-    // on every cards.list refetch would clobber the user's in-progress
-    // edits. react-hooks/exhaustive-deps isn't loaded in this config so
-    // there's no eslint-disable to silence here.
-  }, [openCardId]);
+    // Intentionally narrow deps — seeding should only respond to mode
+    // transitions and contract availability, not to every cache patch.
+  }, [mode, openCardId, creatingForAssigneeId, contracts.length]);
 
-  if (!card || !draft) return null;
+  if (!mode || !draft) return null;
 
-  const currentLevel = effectivePriority(card);
-  const open = openCardId !== null;
+  // currentLevel is for the priority "auto" highlight. In create mode
+  // with no card yet, derive from the draft's dates.
+  const currentLevel =
+    mode === "edit" && editingCard
+      ? effectivePriority(editingCard)
+      : effectivePriority({
+          priorityOverride: draft.priorityOverride,
+          assignmentDate: new Date(draft.assignmentDate),
+        });
+
+  const open = mode !== null;
+
+  const close = () => {
+    if (mode === "edit") closeCard();
+    else closeNewCard();
+  };
 
   const set = <K extends keyof DraftState>(k: K, v: DraftState[K]) =>
     setDraft((d) => (d ? { ...d, [k]: v } : d));
 
   const handleSave = () => {
-    updateMutation.mutate({
-      id: card.id,
-      title: draft.title.trim(),
-      contractId: draft.contractId,
-      type: draft.type,
-      assigneeId: draft.assigneeId,
-      assignmentDate: new Date(draft.assignmentDate),
-      dueDate: new Date(draft.dueDate),
-      priorityOverride: draft.priorityOverride,
-      blockerNote: draft.blockerNote.trim().length === 0
-        ? null
-        : draft.blockerNote.trim(),
-    });
-    closeCard();
+    if (mode === "edit" && editingCard) {
+      updateMutation.mutate({
+        id: editingCard.id,
+        title: draft.title.trim(),
+        contractId: draft.contractId,
+        type: draft.type,
+        assigneeId: draft.assigneeId,
+        assignmentDate: new Date(draft.assignmentDate),
+        dueDate: new Date(draft.dueDate),
+        priorityOverride: draft.priorityOverride,
+        blockerNote:
+          draft.blockerNote.trim().length === 0
+            ? null
+            : draft.blockerNote.trim(),
+      });
+    } else if (mode === "create") {
+      createMutation.mutate({
+        title: draft.title.trim(),
+        contractId: draft.contractId,
+        type: draft.type,
+        assigneeId: draft.assigneeId,
+        assignmentDate: new Date(draft.assignmentDate),
+        dueDate: new Date(draft.dueDate),
+        priorityOverride: draft.priorityOverride,
+        blockerNote:
+          draft.blockerNote.trim().length === 0
+            ? null
+            : draft.blockerNote.trim(),
+      });
+    }
+    close();
   };
 
   const handleArchive = () => {
-    archiveMutation.mutate({ id: card.id });
-    closeCard();
+    if (mode !== "edit" || !editingCard) return;
+    archiveMutation.mutate({ id: editingCard.id });
+    close();
   };
 
   const canSave = draft.title.trim().length > 0;
+  const headerTitle = mode === "edit" ? "Edit task" : "New task";
+  const saveLabel = mode === "edit" ? "Save changes" : "Create task";
 
   return (
     <Dialog.Root
       open={open}
       onOpenChange={(o) => {
-        if (!o) closeCard();
+        if (!o) close();
       }}
     >
       <Dialog.Portal>
@@ -190,19 +275,14 @@ export function CardEditModal() {
         <Dialog.Content className="modal">
           <div className="modal-head">
             <Dialog.Title asChild>
-              <h2>Edit task</h2>
+              <h2>{headerTitle}</h2>
             </Dialog.Title>
             <Dialog.Description className="sr-only">
-              Edit the title, contract, assignee, dates, priority, and blocker
-              note for this task.
+              {mode === "edit"
+                ? "Edit the title, contract, assignee, dates, priority, and blocker note for this task."
+                : "Create a new task — fill in at least a title to enable Create."}
             </Dialog.Description>
-            <Dialog.Close
-              className="modal-close"
-              aria-label="Close"
-              // Reset focus to body on close — Dialog.Close inside Content
-              // by default returns focus to the trigger; that's the card,
-              // which is what we want.
-            >
+            <Dialog.Close className="modal-close" aria-label="Close">
               ✕
             </Dialog.Close>
           </div>
@@ -216,6 +296,9 @@ export function CardEditModal() {
                 autoFocus
                 value={draft.title}
                 onChange={(e) => set("title", e.target.value)}
+                placeholder={
+                  mode === "create" ? "e.g. Re-estimate steel package" : undefined
+                }
               />
             </div>
 
@@ -382,14 +465,16 @@ export function CardEditModal() {
           </div>
 
           <div className="modal-foot">
-            <button
-              type="button"
-              className="btn-ghost btn-danger"
-              onClick={handleArchive}
-              style={{ marginRight: "auto" }}
-            >
-              Archive task
-            </button>
+            {mode === "edit" && (
+              <button
+                type="button"
+                className="btn-ghost btn-danger"
+                onClick={handleArchive}
+                style={{ marginRight: "auto" }}
+              >
+                Archive task
+              </button>
+            )}
             <Dialog.Close asChild>
               <button type="button" className="btn-ghost">
                 Cancel
@@ -401,7 +486,7 @@ export function CardEditModal() {
               onClick={handleSave}
               disabled={!canSave}
             >
-              Save changes
+              {saveLabel}
             </button>
           </div>
         </Dialog.Content>

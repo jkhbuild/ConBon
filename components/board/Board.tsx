@@ -322,6 +322,7 @@ function ColumnsLayout({ groups, people }: LayoutProps) {
     >
       <Column
         columnId={BACKLOG_KEY}
+        assigneeId={null}
         title="Backlog"
         subtitle="Unassigned"
         avatarColor="var(--ink-2)"
@@ -332,6 +333,7 @@ function ColumnsLayout({ groups, people }: LayoutProps) {
         <Column
           key={p.id}
           columnId={p.id}
+          assigneeId={p.id}
           title={p.name.split(" ")[0] ?? p.name}
           subtitle={`${p.role.charAt(0)}${p.role.slice(1).toLowerCase()} · In Progress`}
           avatarColor={p.color}
@@ -349,6 +351,7 @@ function SwimLanesLayout({ groups, people }: LayoutProps) {
     <div className="board-lanes">
       <SwimLane
         columnId={BACKLOG_KEY}
+        assigneeId={null}
         name="Backlog"
         role="Unassigned · drag onto an assignee to start"
         avatarColor="var(--ink-2)"
@@ -360,6 +363,7 @@ function SwimLanesLayout({ groups, people }: LayoutProps) {
         <SwimLane
           key={p.id}
           columnId={p.id}
+          assigneeId={p.id}
           name={p.name}
           role={`${p.role.charAt(0)}${p.role.slice(1).toLowerCase()} · In Progress`}
           avatarColor={p.color}
