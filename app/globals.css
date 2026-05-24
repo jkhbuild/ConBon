@@ -370,6 +370,41 @@ input, select, textarea {
 }
 .btn-ghost:hover { color: var(--ink); border-color: var(--line-strong); }
 
+.btn-danger { color: var(--p5); }
+.btn-danger:hover { color: var(--p5); border-color: var(--p5); }
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Small utility link used inside modals (e.g. "Clear override"). */
+.link-muted {
+  align-self: flex-start;
+  font-size: 12px;
+  color: var(--ink-3);
+  text-decoration: underline;
+  margin-top: 4px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.link-muted:hover { color: var(--ink-2); }
+
+/* Visually hidden but available to screen readers. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ============================================================
    Board
    ============================================================ */
@@ -433,6 +468,26 @@ input, select, textarea {
   flex-direction: column;
   gap: 10px;
   flex: 1;
+}
+
+/* + affordance in the column / lane header — opens the create-card modal. */
+.new-card-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px dashed var(--line-strong);
+  color: var(--ink-3);
+  font-size: 14px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+}
+.new-card-btn:hover {
+  color: var(--ink);
+  border-color: var(--ink-2);
+  background: var(--chip-bg);
 }
 
 /* Layout B — swimlanes */
@@ -749,13 +804,22 @@ input, select, textarea {
   backdrop-filter: blur(2px);
 }
 .modal {
+  /* Radix Dialog: Overlay and Content are siblings under the Portal, so
+     center Content explicitly (the original prototype put the modal
+     inside the backdrop and used place-items on the backdrop). */
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 151;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 18px;
-  width: min(560px, 100%);
+  width: min(560px, calc(100% - 48px));
   max-height: 90vh;
   overflow: auto;
   box-shadow: 0 24px 60px -20px rgba(0,0,0,0.5);
+  outline: none; /* Radix focuses the Content; we use :focus-visible for child fields */
 }
 .modal-head {
   padding: 20px 24px 12px;
@@ -853,6 +917,87 @@ input, select, textarea {
 .assignee-picker button.active {
   border-color: var(--ink);
   background: var(--chip-bg);
+}
+
+/* ============================================================
+   Archive page
+   ============================================================ */
+.archive {
+  flex: 1;
+  overflow: auto;
+  padding: 24px 32px 40px;
+  max-width: 980px;
+}
+.archive-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 22px;
+}
+.archive-head h1 {
+  font-family: var(--font-display), "Inter Tight", sans-serif;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.archive-sub {
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.archive-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 13px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+}
+.archive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+}
+.archive-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 16px;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.archive-chips {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.archive-title {
+  font-size: 14px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.archive-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.archive-archived-at {
+  font-variant-numeric: tabular-nums;
+}
+.archive-backlog-pip {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  background: var(--chip-bg);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
 }
 
 /* ============================================================

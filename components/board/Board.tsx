@@ -20,26 +20,26 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { trpc } from "@/lib/trpc/client";
 import type { RouterOutputs } from "@/lib/trpc/types";
 import { Card, type CardData } from "./Card";
+import { CardEditModal } from "./CardEditModal";
 import { Column } from "./Column";
 import { SwimLane } from "./SwimLane";
-import { effectivePriority } from "@/lib/priority";
+import { computePosition } from "@/lib/position";
+import { useOptimisticListMutation } from "@/lib/hooks/useOptimisticListMutation";
 import { useBoardLayout, useUIStore } from "@/stores/uiStore";
 
-// Board — Phase 5: read-only DnD. Drags update local state for visual
-// feedback; refresh reverts (re-fetch from RSC restores server order).
-// Phase 6 swaps the local setCards for the cards.move mutation and
-// keeps the same DndContext / sensor wiring.
+// Board — Phase 6: live mutations via tRPC + optimistic cache updates.
+// The local-useState mirror from Phase 5 is gone; the React Query cache
+// for cards.list is now the single source of truth. Drag-end calls the
+// cards.move mutation, the optimistic patch repositions the card in the
+// cache, and a hard refresh re-fetches from the server (so the persisted
+// position survives).
 //
-// Architecture notes wired in here:
-//   - @dnd-kit/PointerSensor + KeyboardSensor → /web-design-guidelines
-//     (keyboard a11y for drag)
-//   - aria-live polite region announces moves to screen readers
-//   - startTransition on drag-state updates so user input stays
-//     responsive while React reconciles the new column layouts
-//   - useBoardLayout reads layout from Zustand; Phase 11 swaps the
-//     source for UserPreference.layout in Postgres
+// Within-column ordering is now position-driven (was [priorityOverride
+// desc, dueDate asc] in Phase 5). Dragging a card up or down within its
+// column produces a meaningful position change.
 //
 // The Backlog column uses the literal id "__backlog" both as the
 // useDroppable id and as the Map key. A card's `assigneeId === null`
@@ -54,14 +54,17 @@ type BoardProps = {
   people: PersonData[];
 };
 
+type MoveInput = {
+  id: string;
+  toAssigneeId: string | null;
+  toPosition: number;
+};
+
 export function Board({ initialCards, people }: BoardProps) {
-  // Local state mirrors initial server data. Drags mutate this; a hard
-  // refresh remounts the RSC and reseeds, which is the Phase 5 "refresh
-  // reverts" contract.
-  const [cards, setCards] = useState<CardData[]>(initialCards);
-  useEffect(() => {
-    setCards(initialCards);
-  }, [initialCards]);
+  const utils = trpc.useUtils();
+  const { data: cards = initialCards } = trpc.cards.list.useQuery(undefined, {
+    initialData: initialCards,
+  });
 
   const layout = useBoardLayout();
   const setDraggingCardId = useUIStore((s) => s.setDraggingCardId);
@@ -74,16 +77,44 @@ export function Board({ initialCards, people }: BoardProps) {
   const [announcement, setAnnouncement] = useState("");
 
   const sensors = useSensors(
-    // 5px activation distance keeps card clicks (Phase 6 will open the
+    // 5px activation distance keeps card clicks (Block C will open the
     // edit modal) distinguishable from drags.
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  // Group cards by assignee, sort within group by effective priority desc
-  // then due date asc. Matches reference/prototype/board.jsx behavior.
+  // Optimistic patch for the move mutation. Updates assigneeId, position,
+  // and the assignee relation (so the card's footer chip swaps color
+  // immediately on a cross-column drag — without this, the chip lingers
+  // on the old person until the refetch lands).
+  const movePatch = useCallback(
+    (old: CardData[], input: MoveInput): CardData[] => {
+      const nextAssignee =
+        input.toAssigneeId === null
+          ? null
+          : (people.find((p) => p.id === input.toAssigneeId) ?? null);
+      return old.map((c) =>
+        c.id === input.id
+          ? {
+              ...c,
+              assigneeId: input.toAssigneeId,
+              position: input.toPosition,
+              assignee: nextAssignee,
+            }
+          : c,
+      );
+    },
+    [people],
+  );
+
+  const moveMutation = trpc.cards.move.useMutation(
+    useOptimisticListMutation<MoveInput, CardData>(utils.cards.list, movePatch),
+  );
+
+  // Group cards by assignee, sort within group by position. Phase 5
+  // grouped by priority; Phase 6 makes position authoritative so drag
+  // within a column has visible effect.
   const groups = useMemo(() => {
-    const now = new Date();
     const map = new Map<string, CardData[]>();
     map.set(BACKLOG_KEY, []);
     for (const p of people) map.set(p.id, []);
@@ -97,20 +128,17 @@ export function Board({ initialCards, people }: BoardProps) {
       bucket.push(c);
     }
     for (const bucket of map.values()) {
-      bucket.sort((a, b) => {
-        const pa = effectivePriority(a, now);
-        const pb = effectivePriority(b, now);
-        if (pb !== pa) return pb - pa;
-        return a.dueDate.getTime() - b.dueDate.getTime();
-      });
+      bucket.sort((a, b) => a.position - b.position);
     }
     return map;
   }, [cards, people]);
 
-  // Look up the dragged card for the DragOverlay. Need a ref to read
-  // the latest in callbacks without re-creating them on each render.
+  // Look up the dragged card for the DragOverlay. Ref the latest cards
+  // so drag-end callbacks see post-mutation cache state.
   const cardsRef = useRef(cards);
   cardsRef.current = cards;
+  const groupsRef = useRef(groups);
+  groupsRef.current = groups;
   const draggingCard = useMemo(
     () => cards.find((c) => c.id === draggingCardId) ?? null,
     [cards, draggingCardId],
@@ -140,13 +168,18 @@ export function Board({ initialCards, people }: BoardProps) {
 
       const activeId = String(active.id);
       const overId = String(over.id);
+      if (activeId === overId) {
+        setAnnouncement("Card position unchanged");
+        return;
+      }
+
       const current = cardsRef.current;
       const moved = current.find((c) => c.id === activeId);
       if (!moved) return;
 
-      // Determine the destination column.
-      // Two cases: dropped on a column itself (overId === person.id or
-      // "__backlog") or on another card (overId === some card id).
+      // Resolve the destination assignee. Dropped on a column-level
+      // droppable: overId is "__backlog" or a person id. Dropped on
+      // another card: borrow that card's assignee.
       let destAssigneeId: string | null;
       if (overId === BACKLOG_KEY) {
         destAssigneeId = null;
@@ -158,31 +191,50 @@ export function Board({ initialCards, people }: BoardProps) {
         destAssigneeId = target.assigneeId;
       }
 
-      if (moved.assigneeId === destAssigneeId) {
-        // Within-column drag — in Phase 5 ordering is derived from
-        // priority + due date so this is a visual no-op. Phase 6
-        // updates `position` and the order becomes meaningful.
+      // Compute the new position from the destination bucket's neighbors,
+      // with the active card excluded so within-column drags land in the
+      // gap they were dragged to (not back on top of themselves).
+      const destKey = destAssigneeId ?? BACKLOG_KEY;
+      const destBucket = (groupsRef.current.get(destKey) ?? []).filter(
+        (c) => c.id !== activeId,
+      );
+      let insertIndex: number;
+      if (overId === BACKLOG_KEY || people.some((p) => p.id === overId)) {
+        // Dropped on the column itself → append.
+        insertIndex = destBucket.length;
+      } else {
+        const targetIdx = destBucket.findIndex((c) => c.id === overId);
+        insertIndex = targetIdx >= 0 ? targetIdx : destBucket.length;
+      }
+      const prevPos = insertIndex > 0 ? destBucket[insertIndex - 1].position : null;
+      const nextPos = insertIndex < destBucket.length ? destBucket[insertIndex].position : null;
+      const toPosition = computePosition(prevPos, nextPos);
+
+      // No-op guard: same column, same neighbors → don't send a wasted
+      // mutation. (Compares positions because the bucket is sorted.)
+      if (
+        moved.assigneeId === destAssigneeId &&
+        moved.position === toPosition
+      ) {
         setAnnouncement("Card position unchanged");
         return;
       }
 
       startTransition(() => {
-        setCards((prev) =>
-          prev.map((c) =>
-            c.id === activeId
-              ? { ...c, assigneeId: destAssigneeId, assignee: people.find((p) => p.id === destAssigneeId) ?? null }
-              : c,
-          ),
-        );
+        moveMutation.mutate({
+          id: activeId,
+          toAssigneeId: destAssigneeId,
+          toPosition,
+        });
       });
 
       const destName =
         destAssigneeId === null
           ? "Backlog"
-          : people.find((p) => p.id === destAssigneeId)?.name ?? "—";
+          : (people.find((p) => p.id === destAssigneeId)?.name ?? "—");
       setAnnouncement(`Moved card ${moved.title} to ${destName}`);
     },
-    [people, setDraggingCardId],
+    [moveMutation, people, setDraggingCardId],
   );
 
   const handleDragCancel = useCallback(() => {
@@ -250,6 +302,8 @@ export function Board({ initialCards, people }: BoardProps) {
       >
         {announcement}
       </div>
+
+      <CardEditModal />
     </div>
   );
 }
@@ -268,6 +322,7 @@ function ColumnsLayout({ groups, people }: LayoutProps) {
     >
       <Column
         columnId={BACKLOG_KEY}
+        assigneeId={null}
         title="Backlog"
         subtitle="Unassigned"
         avatarColor="var(--ink-2)"
@@ -278,6 +333,7 @@ function ColumnsLayout({ groups, people }: LayoutProps) {
         <Column
           key={p.id}
           columnId={p.id}
+          assigneeId={p.id}
           title={p.name.split(" ")[0] ?? p.name}
           subtitle={`${p.role.charAt(0)}${p.role.slice(1).toLowerCase()} · In Progress`}
           avatarColor={p.color}
@@ -295,6 +351,7 @@ function SwimLanesLayout({ groups, people }: LayoutProps) {
     <div className="board-lanes">
       <SwimLane
         columnId={BACKLOG_KEY}
+        assigneeId={null}
         name="Backlog"
         role="Unassigned · drag onto an assignee to start"
         avatarColor="var(--ink-2)"
@@ -306,6 +363,7 @@ function SwimLanesLayout({ groups, people }: LayoutProps) {
         <SwimLane
           key={p.id}
           columnId={p.id}
+          assigneeId={p.id}
           name={p.name}
           role={`${p.role.charAt(0)}${p.role.slice(1).toLowerCase()} · In Progress`}
           avatarColor={p.color}

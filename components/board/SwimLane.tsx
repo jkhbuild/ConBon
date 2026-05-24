@@ -6,6 +6,8 @@ import {
   rectSortingStrategy,
 } from "@dnd-kit/sortable";
 import { Card, type CardData } from "./Card";
+import { CardContextMenu } from "./CardContextMenu";
+import { NewCardButton } from "./NewCardButton";
 import { effectivePriority } from "@/lib/priority";
 
 // SwimLane — Layout B: horizontal strip per assignee, cards laid out in
@@ -15,6 +17,8 @@ import { effectivePriority } from "@/lib/priority";
 
 type SwimLaneProps = {
   columnId: string;
+  // null = Backlog, used as cards.create assigneeId for the lane's "+" button
+  assigneeId: string | null;
   name: string;
   role: string;
   avatarColor: string;
@@ -26,6 +30,7 @@ type SwimLaneProps = {
 
 export function SwimLane({
   columnId,
+  assigneeId,
   name,
   role,
   avatarColor,
@@ -68,6 +73,7 @@ export function SwimLane({
               </div>
             </>
           )}
+          <NewCardButton assigneeId={assigneeId} />
         </div>
       </div>
       <SortableContext items={cardIds} strategy={rectSortingStrategy}>
@@ -81,13 +87,15 @@ export function SwimLane({
             </div>
           )}
           {cards.map((card) => (
-            <Card key={card.id} card={card}>
-              <Card.Top />
-              <Card.Title />
-              <Card.Blocker />
-              <Card.Footer />
-              <Card.Aging />
-            </Card>
+            <CardContextMenu key={card.id} card={card}>
+              <Card card={card}>
+                <Card.Top />
+                <Card.Title />
+                <Card.Blocker />
+                <Card.Footer />
+                <Card.Aging />
+              </Card>
+            </CardContextMenu>
           ))}
         </div>
       </SortableContext>
