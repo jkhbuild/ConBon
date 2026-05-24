@@ -23,6 +23,7 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { trpc } from "@/lib/trpc/client";
 import type { RouterOutputs } from "@/lib/trpc/types";
 import { Card, type CardData } from "./Card";
+import { CardEditModal } from "./CardEditModal";
 import { Column } from "./Column";
 import { SwimLane } from "./SwimLane";
 import { computePosition } from "@/lib/position";
@@ -301,6 +302,8 @@ export function Board({ initialCards, people }: BoardProps) {
       >
         {announcement}
       </div>
+
+      <CardEditModal />
     </div>
   );
 }

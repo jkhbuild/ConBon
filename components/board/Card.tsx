@@ -1,6 +1,14 @@
 "use client";
 
-import { createContext, useContext, type ReactNode, type CSSProperties } from "react";
+import {
+  createContext,
+  useContext,
+  useRef,
+  type ReactNode,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { RouterOutputs } from "@/lib/trpc/types";
@@ -13,6 +21,7 @@ import {
   priorityLabel,
   priorityTint,
 } from "@/lib/priority";
+import { useUIStore } from "@/stores/uiStore";
 
 // Card — compound component for one task. Composition over boolean props
 // per /vercel-composition-patterns: the root reads the card off context
@@ -66,6 +75,28 @@ export function Card({ card, children, isOverlay = false }: CardRootProps) {
     isDragging,
   } = sortable;
 
+  const openCard = useUIStore((s) => s.openCard);
+  // Distinguish a click (open modal) from a drag (move card) using the
+  // pointer-position delta between pointerdown and click. The 5px
+  // threshold mirrors the PointerSensor's activationConstraint distance
+  // so the two paths are exclusive: above 5px @dnd-kit takes over and
+  // we suppress the click; below it we open the modal.
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    pointerStartRef.current = { x: e.clientX, y: e.clientY };
+    listeners?.onPointerDown?.(e);
+  };
+  const handleClick = (e: ReactMouseEvent<HTMLDivElement>) => {
+    if (isOverlay) return;
+    const start = pointerStartRef.current;
+    pointerStartRef.current = null;
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    if (dx * dx + dy * dy >= 25) return;
+    openCard(card.id);
+  };
+
   const style: CSSProperties = {
     // Bind the CSS-variable hooks the prototype CSS reads off `.card`.
     // priorityColor / priorityTint return `var(--pN)` references so
@@ -90,7 +121,12 @@ export function Card({ card, children, isOverlay = false }: CardRootProps) {
         style={style}
         // @dnd-kit attaches role/tabIndex/aria-* via `attributes`.
         {...(isOverlay ? {} : attributes)}
-        {...(isOverlay ? {} : listeners)}
+        // Spread @dnd-kit's listeners, then override onPointerDown so we
+        // can snapshot the pointer position for the click/drag check.
+        {...(isOverlay
+          ? {}
+          : { ...listeners, onPointerDown: handlePointerDown })}
+        onClick={handleClick}
         // `inert` removes the source card from sequential focus + pointer
         // events while the DragOverlay floater handles interaction.
         inert={isDragging && !isOverlay}
