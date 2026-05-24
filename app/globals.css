@@ -920,6 +920,87 @@ input, select, textarea {
 }
 
 /* ============================================================
+   Archive page
+   ============================================================ */
+.archive {
+  flex: 1;
+  overflow: auto;
+  padding: 24px 32px 40px;
+  max-width: 980px;
+}
+.archive-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 22px;
+}
+.archive-head h1 {
+  font-family: var(--font-display), "Inter Tight", sans-serif;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.archive-sub {
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.archive-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 13px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+}
+.archive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+}
+.archive-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 16px;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.archive-chips {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.archive-title {
+  font-size: 14px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.archive-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.archive-archived-at {
+  font-variant-numeric: tabular-nums;
+}
+.archive-backlog-pip {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  background: var(--chip-bg);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+
+/* ============================================================
    Admin page
    ============================================================ */
 .admin {
