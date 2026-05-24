@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { TaskType } from "@prisma/client";
-import { router, publicProcedure } from "@/lib/trpc/trpc";
+import { router, protectedProcedure } from "@/lib/trpc/trpc";
 
 // Cards router.
 //
@@ -14,9 +15,12 @@ import { router, publicProcedure } from "@/lib/trpc/trpc";
 // API shape simple and the same payload powers both the column and
 // swimlane layouts.
 //
-// Phase 6 — mutations use `publicProcedure` with a TODO. Phase 7 swaps
-// these to `protectedProcedure` and adds per-row ownership checks
-// (Employee → own cards only; Admin / Manager → any).
+// Phase 7 — every procedure is `protectedProcedure` (signed-in users
+// only). Mutations that touch a specific card additionally enforce
+// strict ownership: Employees can only move / update / archive / restore
+// cards assigned to them. Admin + Manager can touch any. Backlog cards
+// (assigneeId IS NULL) are not "owned" by anyone, so Employees can't
+// claim them directly — Admin/Manager assigns them out.
 
 const cuidSchema = z.string().min(1);
 const taskTypeSchema = z.nativeEnum(TaskType);
@@ -54,8 +58,14 @@ const cardMoveInput = z.object({
 
 const cardIdInput = z.object({ id: cuidSchema });
 
+// True when the role lacks the privilege to mutate a card not owned by
+// the current user. Admin + Manager bypass the ownership check.
+function isEmployee(role: "EMPLOYEE" | "ADMIN" | "MANAGER"): boolean {
+  return role === "EMPLOYEE";
+}
+
 export const cardsRouter = router({
-  list: publicProcedure.query(async ({ ctx }) => {
+  list: protectedProcedure.query(async ({ ctx }) => {
     return ctx.db.card.findMany({
       where: { archivedAt: null },
       include: {
@@ -66,7 +76,7 @@ export const cardsRouter = router({
     });
   }),
 
-  listArchived: publicProcedure.query(async ({ ctx }) => {
+  listArchived: protectedProcedure.query(async ({ ctx }) => {
     return ctx.db.card.findMany({
       where: { archivedAt: { not: null } },
       include: {
@@ -77,12 +87,16 @@ export const cardsRouter = router({
     });
   }),
 
-  // TODO(phase-7): protectedProcedure + ownership check
-  move: publicProcedure.input(cardMoveInput).mutation(async ({ ctx, input }) => {
+  move: protectedProcedure.input(cardMoveInput).mutation(async ({ ctx, input }) => {
     return ctx.db.$transaction(async (tx) => {
       const card = await tx.card.findUnique({ where: { id: input.id } });
-      if (!card) throw new Error("Card not found");
-      if (card.archivedAt) throw new Error("Cannot move an archived card");
+      if (!card) throw new TRPCError({ code: "NOT_FOUND", message: "Card not found" });
+      if (card.archivedAt) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot move an archived card" });
+      }
+      if (isEmployee(ctx.role) && card.assigneeId !== ctx.userId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not your card" });
+      }
       return tx.card.update({
         where: { id: input.id },
         data: {
@@ -94,9 +108,18 @@ export const cardsRouter = router({
     });
   }),
 
-  // TODO(phase-7): protectedProcedure + ownership check
-  update: publicProcedure.input(cardUpdateInput).mutation(async ({ ctx, input }) => {
+  update: protectedProcedure.input(cardUpdateInput).mutation(async ({ ctx, input }) => {
     const { id, ...patch } = input;
+    if (isEmployee(ctx.role)) {
+      const card = await ctx.db.card.findUnique({
+        where: { id },
+        select: { assigneeId: true },
+      });
+      if (!card) throw new TRPCError({ code: "NOT_FOUND", message: "Card not found" });
+      if (card.assigneeId !== ctx.userId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not your card" });
+      }
+    }
     return ctx.db.card.update({
       where: { id },
       data: patch,
@@ -104,8 +127,7 @@ export const cardsRouter = router({
     });
   }),
 
-  // TODO(phase-7): protectedProcedure (any signed-in user can create)
-  create: publicProcedure.input(cardCreateInput).mutation(async ({ ctx, input }) => {
+  create: protectedProcedure.input(cardCreateInput).mutation(async ({ ctx, input }) => {
     const today = new Date();
     const fourteenDaysOut = new Date(today);
     fourteenDaysOut.setDate(fourteenDaysOut.getDate() + 14);
@@ -134,8 +156,17 @@ export const cardsRouter = router({
     });
   }),
 
-  // TODO(phase-7): protectedProcedure + ownership check
-  archive: publicProcedure.input(cardIdInput).mutation(async ({ ctx, input }) => {
+  archive: protectedProcedure.input(cardIdInput).mutation(async ({ ctx, input }) => {
+    if (isEmployee(ctx.role)) {
+      const card = await ctx.db.card.findUnique({
+        where: { id: input.id },
+        select: { assigneeId: true },
+      });
+      if (!card) throw new TRPCError({ code: "NOT_FOUND", message: "Card not found" });
+      if (card.assigneeId !== ctx.userId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not your card" });
+      }
+    }
     return ctx.db.card.update({
       where: { id: input.id },
       data: { archivedAt: new Date() },
@@ -143,11 +174,13 @@ export const cardsRouter = router({
     });
   }),
 
-  // TODO(phase-7): protectedProcedure + ownership check
-  restore: publicProcedure.input(cardIdInput).mutation(async ({ ctx, input }) => {
+  restore: protectedProcedure.input(cardIdInput).mutation(async ({ ctx, input }) => {
     // Restored cards go to the end of their assignee bucket — position may
     // have collided with an active card while this one was archived.
     const card = await ctx.db.card.findUniqueOrThrow({ where: { id: input.id } });
+    if (isEmployee(ctx.role) && card.assigneeId !== ctx.userId) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Not your card" });
+    }
     const tail = await ctx.db.card.findFirst({
       where: { assigneeId: card.assigneeId, archivedAt: null },
       orderBy: { position: "desc" },
