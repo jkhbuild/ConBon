@@ -6,6 +6,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { Card, type CardData } from "./Card";
+import { CardContextMenu } from "./CardContextMenu";
 
 // Column — the Layout A presentation: a vertical lane per assignee
 // plus a Backlog lane on the left. The whole column is a drop zone
@@ -59,13 +60,15 @@ export function Column({
         <div className="col-body">
           {cards.length === 0 && <div className="empty-col">— empty —</div>}
           {cards.map((card) => (
-            <Card key={card.id} card={card}>
-              <Card.Top />
-              <Card.Title />
-              <Card.Blocker />
-              <Card.Footer />
-              <Card.Aging />
-            </Card>
+            <CardContextMenu key={card.id} card={card}>
+              <Card card={card}>
+                <Card.Top />
+                <Card.Title />
+                <Card.Blocker />
+                <Card.Footer />
+                <Card.Aging />
+              </Card>
+            </CardContextMenu>
           ))}
         </div>
       </SortableContext>

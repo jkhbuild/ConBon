@@ -6,6 +6,7 @@ import {
   rectSortingStrategy,
 } from "@dnd-kit/sortable";
 import { Card, type CardData } from "./Card";
+import { CardContextMenu } from "./CardContextMenu";
 import { effectivePriority } from "@/lib/priority";
 
 // SwimLane — Layout B: horizontal strip per assignee, cards laid out in
@@ -81,13 +82,15 @@ export function SwimLane({
             </div>
           )}
           {cards.map((card) => (
-            <Card key={card.id} card={card}>
-              <Card.Top />
-              <Card.Title />
-              <Card.Blocker />
-              <Card.Footer />
-              <Card.Aging />
-            </Card>
+            <CardContextMenu key={card.id} card={card}>
+              <Card card={card}>
+                <Card.Top />
+                <Card.Title />
+                <Card.Blocker />
+                <Card.Footer />
+                <Card.Aging />
+              </Card>
+            </CardContextMenu>
           ))}
         </div>
       </SortableContext>
