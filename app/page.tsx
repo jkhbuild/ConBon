@@ -1,13 +1,7 @@
+import { redirect } from "next/navigation";
+
+// The board lives at /active; / is just a redirect so deep-links and the
+// root URL land in the same place.
 export default function HomePage() {
-  return (
-    <main
-      style={{
-        fontFamily: "system-ui, sans-serif",
-        padding: "2rem",
-      }}
-    >
-      <h1>ConBon</h1>
-      <p>Project Controls Kanban Board — scaffolded. Implementation begins at Phase 2.</p>
-    </main>
-  );
+  redirect("/active");
 }
