@@ -26,12 +26,12 @@ Every phase declares:
 
 ## Status
 
-**Planning complete.** No code yet. Phase 1 ready to start.
+**Phase 1 complete.** Phase 2 ready to start.
 
 | Phase | Name | Status |
 |---|---|---|
-| 1 | Repo scaffolding & prototype preservation | Not started |
-| 2 | Database, Prisma, data model | Not started |
+| 1 | Repo scaffolding & prototype preservation | ✅ Done |
+| 2 | Database, Prisma, data model | ⏳ Next |
 | 3 | tRPC backbone (read-only) | Not started |
 | 4 | Design system port, CSS, shell | Not started |
 | 5 | Board read-only with @dnd-kit | Not started |
