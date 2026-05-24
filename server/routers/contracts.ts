@@ -1,13 +1,14 @@
-import { router, publicProcedure } from "@/lib/trpc/trpc";
+import { router, protectedProcedure } from "@/lib/trpc/trpc";
 
-// Contracts router (read-only in Phase 3).
+// Contracts router (read-only in Phase 3 — gated to signed-in users in
+// Phase 7).
 //
 // `contracts.list` returns active contracts sorted by code (e.g.
 // "B41207" < "H29183" < "N36054" < "V52461"), which is the same order
 // the prototype's contract filter chip row renders in.
 
 export const contractsRouter = router({
-  list: publicProcedure.query(async ({ ctx }) => {
+  list: protectedProcedure.query(async ({ ctx }) => {
     return ctx.db.contract.findMany({
       where: { active: true },
       orderBy: { code: "asc" },

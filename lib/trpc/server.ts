@@ -16,5 +16,5 @@ import { appRouter } from "@/server/routers/_app";
 const createCaller = createCallerFactory(appRouter);
 
 export async function getServerCaller() {
-  return createCaller(createContext());
+  return createCaller(await createContext());
 }
