@@ -1,13 +1,16 @@
+import { notFound } from "next/navigation";
 import { getServerCaller } from "@/lib/trpc/server";
 
 // Dev-only diagnostic page. Sanity-check that the tRPC backbone is wired
 // end-to-end: server caller → routers → Prisma → Postgres → back as JSON.
-// Phase 3 success criterion is that this renders the seeded
-// 4 people + 4 contracts + 15 cards.
+// Phase 3 success criterion was 4 people + 4 contracts + 15 cards; Phase
+// 5's /active board supersedes this as the integration smoke test. Kept
+// around as a debugging affordance but 404'd in production builds.
 
 export const dynamic = "force-dynamic";
 
 export default async function DataDumpPage() {
+  if (process.env.NODE_ENV === "production") notFound();
   const trpc = await getServerCaller();
   const [people, contracts, cards] = await Promise.all([
     trpc.people.list(),
