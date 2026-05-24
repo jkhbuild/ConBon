@@ -1,27 +1,26 @@
-// ConBon — Phase 2 data model
+// ConBon data model.
 //
-// ID strategy: cuid() for all primary keys. cuid() is shorter than uuid,
-// roughly sortable by creation time, URL-safe, and Prisma's default —
-// fine for an internal app with no public ID surface.
+// ID strategy: cuid() for all primary keys. Shorter than uuid, roughly
+// sortable by creation time, URL-safe, and Prisma's default. Fine for
+// an internal app with no public ID surface.
 //
-// Divergence from PLAN.md's schema sketch (intentional):
-// - No `columnKey` enum on Card. The prototype's column model is
-//   "Backlog (assignee IS NULL) + one column/lane per Person", so
-//   `assigneeId` already IS the column dimension. A separate
-//   columnKey would duplicate the signal. PLAN.md flagged this with
-//   a "confirm from prototype" caveat; confirmed against board.jsx.
-// - "Complete" and "Archive" collapse into one `archivedAt` timestamp
-//   per PLAN.md Phase 6. Admin metrics in Phase 9 derive cycle time
-//   from createdAt → archivedAt.
+// Schema choices worth noting:
+// - No `columnKey` enum on Card. The Kanban columns are people + a
+//   Backlog bucket (assignee IS NULL), so `assigneeId` already IS the
+//   column dimension; a separate columnKey would just duplicate it.
+//   `cards.move({ id, toAssigneeId, toPosition })` matches this shape.
+// - "Complete" and "Archive" collapse into one `archivedAt` timestamp.
+//   Admin metrics derive cycle time from `createdAt → archivedAt`. If
+//   distinguishing the reason becomes useful later, add an enum then.
 //
 // Postgres specifics:
-// - DateTime maps to timestamptz by default (correct for everything
-//   except assignmentDate/dueDate, which use @db.Date — calendar
-//   dates without time-of-day or zone).
+// - DateTime maps to timestamptz by default. The exceptions are
+//   assignmentDate / dueDate, which use @db.Date (calendar dates,
+//   no time-of-day, no zone).
 // - Json maps to jsonb for the AuditLog before/after fields.
-// - Partial index `WHERE "archivedAt" IS NULL` on Card is added via
-//   raw SQL appended to the init migration (Prisma's @@index can't
-//   express a WHERE clause).
+// - The partial index `WHERE "archivedAt" IS NULL` on Card is the
+//   primary board-fetch index; added via raw SQL in the init
+//   migration since Prisma's @@index can't express a WHERE clause.
 
 generator client {
   provider = "prisma-client-js"
@@ -50,9 +49,9 @@ enum TaskType {
 model Person {
   id        String   @id @default(cuid())
   name      String
-  email     String?  @unique // Phase 7 matches NextAuth sign-in against this
+  email     String?  @unique // used for NextAuth sign-in matching
   role      Role     @default(EMPLOYEE)
-  color     String // hex (#rrggbb); palette enforced in Admin UI (Phase 9), not at DB level
+  color     String // hex (#rrggbb); palette enforced at the app layer, not at DB
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -69,7 +68,7 @@ model Contract {
   id        String   @id @default(cuid())
   code      String   @unique // 1 uppercase letter + 5 digits, e.g. "N36054"
   name      String
-  color     String? // optional; Admin UI may set in Phase 9
+  color     String? // optional; set via the Admin UI
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -83,7 +82,7 @@ model Card {
   id               String    @id @default(cuid())
   title            String
   type             TaskType
-  assignmentDate   DateTime  @db.Date // basis for auto-priority aging (see lib/priority.ts, Phase 5)
+  assignmentDate   DateTime  @db.Date // basis for auto-priority aging (see lib/priority.ts)
   dueDate          DateTime  @db.Date
   priorityOverride Int? // 1..5; null = use auto-priority derived from assignmentDate
   blockerNote      String? // free-form blocker text shown on the card
@@ -108,7 +107,7 @@ model Card {
 
 model AllowedUser {
   id        String   @id @default(cuid())
-  email     String   @unique // store lowercase; Phase 7 case-folds on insert
+  email     String   @unique // stored lowercase; case-folded on insert
   role      Role     @default(EMPLOYEE) // role to assign to the matching Person on first sign-in
   createdAt DateTime @default(now())
 
@@ -119,7 +118,7 @@ model AllowedUser {
 model UserPreference {
   userId    String   @id // FK Person, also PK — one prefs row per person
   user      Person   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  theme     String   @default("soft") // "soft" | "bold" | "bold-noir" | "bold-forest" (see Phase 11)
+  theme     String   @default("soft") // "soft" | "bold" | "bold-noir" | "bold-forest"
   layout    String   @default("columns") // "columns" | "swimlanes"
   updatedAt DateTime @updatedAt
 }
@@ -136,8 +135,8 @@ model AuditLog {
   actorId String?
   actor   Person? @relation("AuditLogActor", fields: [actorId], references: [id], onDelete: SetNull)
 
-  // History query — chronological per entity (Phase 10 HistoryModal)
+  // History query — chronological per entity
   @@index([entityType, entityId, createdAt(sort: Desc)])
-  // Notifications feed — chronological per actor (Phase 10 BellDropdown)
+  // Notifications feed — chronological per actor
   @@index([actorId, createdAt(sort: Desc)])
 }

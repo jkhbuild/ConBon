@@ -53,3 +53,7 @@ design_handoff_conbon_kanban/
 
 # Claude Code session-local config (settings.local.json, etc.)
 .claude/
+
+# Local agent / project memory (kept out of the shared repo)
+CLAUDE.md
+PLAN.md
