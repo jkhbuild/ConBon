@@ -90,9 +90,8 @@ Directories show empty `.gitkeep` placeholders. Each phase replaces its placehol
 
 Per `PLAN.md`, the project ships in 14 phases. Current status:
 
-- ✅ **Phase 0** — Architecture locked, plan committed, prototype preserved, scaffolding complete
-- ⏳ **Phase 1** — Repo scaffolding & prototype preservation (this commit)
-- ⬜ Phase 2 — Database, Prisma, data model
+- ✅ **Phase 1** — Repo scaffolding & prototype preservation
+- ⏳ **Phase 2** — Database, Prisma, data model (next)
 - ⬜ Phases 3–14 — see `PLAN.md`
 
 ## Local reference materials
