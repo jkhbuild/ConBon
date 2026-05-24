@@ -1,0 +1,23 @@
+# ConBon — local development Postgres
+#
+# Spins up Postgres 16 for local dev. Data persists in ./.data/postgres
+# (gitignored). Production stack lives in docker-compose.prod.yml (Phase 12).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: conbon-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: conbon
+      POSTGRES_PASSWORD: conbon
+      POSTGRES_DB: conbon
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./.data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U conbon -d conbon"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
