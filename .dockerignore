@@ -1,0 +1,54 @@
+# everything we don't want in the production image
+
+# version control
+.git/
+.gitignore
+.gitattributes
+
+# dependencies (re-installed in builder stage)
+node_modules/
+
+# build outputs (rebuilt in container)
+.next/
+out/
+build/
+dist/
+
+# env files
+.env
+.env.local
+.env.development
+.env.production
+
+# CI / test artifacts
+.github/
+e2e/
+coverage/
+test-results/
+playwright-report/
+
+# docs and planning (not needed at runtime)
+*.md
+PLAN.md
+reference/prototype/
+
+# editor / OS cruft
+.DS_Store
+.idea/
+.vscode/
+
+# local postgres volume and other host-only data
+.data/
+
+# tarballs, handoff materials
+*.tar.gz
+*.tgz
+design_handoff_conbon_kanban/
+
+# tooling configs not needed at runtime
+.eslintrc*
+eslint.config.mjs
+.prettierrc*
+
+# typescript build cache
+*.tsbuildinfo

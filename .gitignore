@@ -1,0 +1,52 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# next.js
+.next/
+out/
+build/
+dist/
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# env files (keep .env.example tracked)
+.env
+.env.local
+.env.development
+.env.development.local
+.env.production
+.env.production.local
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# editor / OS cruft
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# coverage / test artifacts
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+
+# local postgres data volume (Phase 2)
+.data/
+
+# turbo / vercel cache
+.turbo/
+.vercel/
+
+# tarballs and local handoff materials
+*.tar.gz
+*.tgz
+design_handoff_conbon_kanban/
