@@ -2,15 +2,14 @@ import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 
 // Gate every app route on a signed-in session. Public exceptions are
-// configured via the matcher (auth API, tRPC API, signin page, Next
-// internals, favicon). Cookies + JWT decode happen inside auth() — no
-// Prisma touch, so this is edge-runtime safe.
+// configured via the matcher (auth API, tRPC API, SSE events, signin
+// page, Next internals, favicon). Cookies + JWT decode happen inside
+// auth() — no Prisma touch, so this is edge-runtime safe.
 //
-// /api/trpc/* is intentionally NOT proxied: tRPC clients expect JSON
-// errors, not HTML redirects, on an expired session. The procedure-level
-// guards (protectedProcedure / adminProcedure / managerProcedure) return
-// proper UNAUTHORIZED / FORBIDDEN codes that the React Query layer can
-// surface to the user.
+// /api/trpc/* and /api/events are intentionally NOT proxied: those
+// clients expect JSON errors (tRPC) or an SSE-shaped 401 (EventSource),
+// not HTML redirects, on an expired session. The route-level guards
+// return proper UNAUTHORIZED codes that the client layer can act on.
 
 export default auth((req) => {
   if (req.auth) return NextResponse.next();
@@ -26,5 +25,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/((?!api/auth|api/trpc|signin|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api/auth|api/trpc|api/events|signin|_next/static|_next/image|favicon.ico).*)"],
 };
