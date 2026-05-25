@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { auth } from "@/auth";
 import { Header } from "@/components/shell/Header";
 import { MobileSplash } from "@/components/shell/MobileSplash";
 import { RealtimeSync } from "@/components/realtime/RealtimeSync";
@@ -9,12 +10,23 @@ import { RealtimeSync } from "@/components/realtime/RealtimeSync";
 // globals.css picks which one is visible based on viewport width).
 // <RealtimeSync /> opens the SSE pipe to /api/events; it renders nothing
 // and lives at this layer so every signed-in route stays in sync.
+//
+// Session is fetched server-side and passed as a narrow `viewer` prop to
+// the Header — avoids dragging next-auth/react + a SessionProvider into
+// the bundle just to render a role pill.
 
-export default function AppLayout({ children }: { children: ReactNode }) {
+export default async function AppLayout({ children }: { children: ReactNode }) {
+  const session = await auth();
+  const viewer = session?.user
+    ? {
+        name: session.user.name ?? session.user.email ?? "Signed in",
+        role: session.user.role,
+      }
+    : null;
   return (
     <>
       <div className="app">
-        <Header />
+        <Header viewer={viewer} />
         <main className="app-main">{children}</main>
       </div>
       <MobileSplash />

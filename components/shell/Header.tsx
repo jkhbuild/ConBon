@@ -1,14 +1,41 @@
 "use client";
 
+import type { Role } from "@prisma/client";
 import { trpc } from "@/lib/trpc/client";
 import { useTheme } from "./ThemeProvider";
+import { signOutAction } from "@/app/(app)/_actions/signOut";
 
 // The shell header. Client component so the theme toggle, open-task counter,
-// and (later) role pill + bell dropdown can all live in one place. The
-// counter reads cards.list via tRPC — the same query the board page uses,
-// so the React Query cache serves it without a second roundtrip.
+// and role pill can all live in one place. The counter reads cards.list via
+// tRPC — the same query the board page uses, so the React Query cache
+// serves it without a second roundtrip.
+//
+// The viewer prop is passed from the (app) layout (server-fetched session)
+// rather than via useSession() so we don't have to wrap the tree in
+// SessionProvider just to render a name + role badge.
 
-export function Header() {
+export type Viewer = {
+  name: string;
+  role: Role;
+};
+
+type Props = {
+  viewer: Viewer | null;
+};
+
+const ROLE_LABEL: Record<Role, string> = {
+  EMPLOYEE: "Employee",
+  ADMIN: "Admin",
+  MANAGER: "Manager",
+};
+
+const ROLE_CLASS: Record<Role, string> = {
+  EMPLOYEE: "is-employee",
+  ADMIN: "is-admin",
+  MANAGER: "is-manager",
+};
+
+export function Header({ viewer }: Props) {
   const { theme, toggle } = useTheme();
   const { data: cards } = trpc.cards.list.useQuery();
   const openCount = cards?.length ?? 0;
@@ -28,10 +55,27 @@ export function Header() {
         {openCount} open task{openCount === 1 ? "" : "s"}
       </div>
 
-      {/* Role pill placeholder — Phase 7 swaps this for the real role chip. */}
-      <span className="role-pill-placeholder" aria-label="Role (sign-in required)">
-        Signed-out
-      </span>
+      {viewer ? (
+        <>
+          <span className={`role-pill ${ROLE_CLASS[viewer.role]}`}>
+            <span className="role-pill-name">{viewer.name}</span>
+            <span className="role-pill-tag">{ROLE_LABEL[viewer.role]}</span>
+          </span>
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              className="btn-row"
+              title="Sign out"
+            >
+              Sign out
+            </button>
+          </form>
+        </>
+      ) : (
+        <span className="role-pill-placeholder" aria-label="Not signed in">
+          Signed-out
+        </span>
+      )}
 
       {/* Notifications bell placeholder — Phase 10 wires the dropdown. */}
       <button
