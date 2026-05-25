@@ -2,7 +2,15 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Inter_Tight, IBM_Plex_Sans } from "next/font/google";
 import { TRPCProvider } from "@/lib/trpc/provider";
-import { ThemeProvider, themeInitScript } from "@/components/shell/ThemeProvider";
+import {
+  PreferencesProvider,
+  type BoardLayout,
+  type InitialPreferences,
+  type Theme,
+  themeInitScript,
+} from "@/components/shell/PreferencesProvider";
+import { auth } from "@/auth";
+import { getServerCaller } from "@/lib/trpc/server";
 import "./globals.css";
 
 // next/font handles preload + font-display: swap automatically. Subsetting
@@ -37,7 +45,23 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+// Phase 11: PreferencesProvider lives at the root so theme + layout work
+// for both /signin (signed-out, localStorage-only) and /(app) (signed-in,
+// DB-backed via initial). auth() is cached via React.cache so the
+// duplicate call in (app)/layout for viewer info costs nothing extra;
+// the prefs.get call only fires for signed-in viewers.
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const session = await auth();
+  let initialPrefs: InitialPreferences | null = null;
+  if (session?.user) {
+    const trpc = await getServerCaller();
+    const raw = await trpc.prefs.get();
+    initialPrefs = {
+      theme: raw.theme === "bold" ? "bold" : "soft",
+      layout: raw.layout === "swimlanes" ? "swimlanes" : "columns",
+    } satisfies { theme: Theme; layout: BoardLayout };
+  }
+
   return (
     <html
       lang="en"
@@ -47,13 +71,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         {/* Set data-theme synchronously before first paint so we don't flash
             the wrong palette on reload. Reads the same localStorage key
-            ThemeProvider writes to. */}
+            PreferencesProvider writes to. */}
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body>
-        <ThemeProvider>
-          <TRPCProvider>{children}</TRPCProvider>
-        </ThemeProvider>
+        {/* TRPCProvider must wrap PreferencesProvider — the provider
+            calls trpc.prefs.set.useMutation() to persist toggles. */}
+        <TRPCProvider>
+          <PreferencesProvider initial={initialPrefs}>{children}</PreferencesProvider>
+        </TRPCProvider>
       </body>
     </html>
   );

@@ -6,7 +6,8 @@ import { RealtimeSync } from "@/components/realtime/RealtimeSync";
 import { NotificationToasts } from "@/components/notifications/NotificationToasts";
 
 // Shell layout for the authenticated app routes — /active, /archive, /admin.
-// The root layout owns ThemeProvider + TRPCProvider; this one just wires
+// The root layout owns TRPCProvider + PreferencesProvider (the latter
+// initialized with the signed-in viewer's DB prefs); this layout wires
 // the header + main column and renders MobileSplash alongside (CSS in
 // globals.css picks which one is visible based on viewport width).
 // <RealtimeSync /> opens the SSE pipe to /api/events; it renders nothing
@@ -14,9 +15,10 @@ import { NotificationToasts } from "@/components/notifications/NotificationToast
 // <NotificationToasts /> subscribes to audit.listForUser and pops a
 // Radix Toast on each new event affecting the viewer.
 //
-// Session is fetched server-side and passed as a narrow `viewer` prop to
-// the Header — avoids dragging next-auth/react + a SessionProvider into
-// the bundle just to render a role pill.
+// Session is fetched server-side (cached via React.cache so the root
+// layout's call dedupes with this one) and passed as a narrow `viewer`
+// prop to the Header — avoids dragging next-auth/react + a
+// SessionProvider into the bundle just to render a role pill.
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await auth();
