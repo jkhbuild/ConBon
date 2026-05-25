@@ -3,6 +3,7 @@ import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import type { Provider } from "next-auth/providers";
 import { db } from "@/lib/db";
+import { PALETTE_DEFAULT_HEX } from "@/lib/palette";
 import type { Role } from "@prisma/client";
 
 // Phase 7 auth config.
@@ -72,7 +73,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email,
           name: user.name ?? email,
           role: allowed.role,
-          color: "#888888",
+          color: PALETTE_DEFAULT_HEX,
         },
       });
 

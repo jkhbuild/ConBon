@@ -1163,6 +1163,266 @@ input, select, textarea {
 }
 
 /* ============================================================
+   Admin CRUD pages (Phase 9)
+   Tab nav + page shell + data table + swatch picker.
+   The metrics admin (`.admin` above, ported from the prototype) is
+   not currently mounted; these styles are independent.
+   ============================================================ */
+.admin-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 28px 32px 40px;
+  gap: 20px;
+  overflow: auto;
+}
+.admin-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
+.admin-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-radius: 8px 8px 0 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  border: 1px solid transparent;
+  border-bottom: none;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+.admin-tab:hover { color: var(--ink); background: var(--chip-bg); }
+.admin-tab.is-active {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+.admin-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.admin-head h1 {
+  font-size: 22px;
+  margin: 0;
+}
+.admin-sub {
+  color: var(--ink-2);
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.admin-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.admin-denied {
+  align-self: center;
+  margin: 64px auto;
+  max-width: 38ch;
+  padding: 18px 22px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+.admin-denied h2 {
+  font-size: 18px;
+  margin: 0 0 6px;
+  color: var(--ink);
+}
+
+/* Data table */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 13px;
+}
+.data-table thead th {
+  text-align: left;
+  padding: 12px 14px;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+}
+.data-table tbody td {
+  padding: 12px 14px;
+  border-top: 1px solid var(--line);
+  vertical-align: middle;
+  color: var(--ink);
+}
+.data-table tbody tr:first-child td { border-top: none; }
+.data-table tbody tr.is-dim td {
+  color: var(--ink-3);
+  background: color-mix(in srgb, var(--bg) 30%, transparent);
+}
+.data-table .row-actions {
+  display: inline-flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.data-table-empty {
+  margin-top: -1px;
+  padding: 24px;
+  text-align: center;
+  font-style: italic;
+  color: var(--ink-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+}
+
+/* Buttons used in admin table rows — small, inline */
+.btn-row {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  background: transparent;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+.btn-row:hover { color: var(--ink); border-color: var(--line-strong); }
+.btn-row.is-danger { color: var(--p5); }
+.btn-row.is-danger:hover { color: var(--p5); border-color: var(--p5); }
+
+/* Avatar utility — small disc with initials. Used by People admin rows
+   and (later phases) anywhere a Person needs a glanceable badge. */
+.avatar-sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
+/* Role pill — name + role badge in the header (replaces Phase 4/7
+   placeholder) and on admin row chips. Tier-tinted via modifier. */
+.role-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+  background: var(--chip-bg);
+  border: 1px solid var(--line);
+}
+.role-pill .role-pill-name { color: var(--ink); }
+.role-pill .role-pill-tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--ink-2);
+}
+.role-pill.is-manager .role-pill-tag {
+  background: color-mix(in srgb, var(--p5) 22%, transparent);
+  color: var(--p5);
+}
+.role-pill.is-admin .role-pill-tag {
+  background: color-mix(in srgb, var(--p3) 28%, transparent);
+  color: var(--ink);
+}
+.role-pill.is-employee .role-pill-tag {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--ink-2);
+}
+
+/* Palette swatch picker — constrained color chooser used in People +
+   Contracts edit modals. */
+.swatch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.swatch {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.swatch:hover { transform: scale(1.06); }
+.swatch.is-selected {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.swatch.is-none {
+  background:
+    linear-gradient(45deg, transparent 47%, var(--line-strong) 47%, var(--line-strong) 53%, transparent 53%),
+    var(--surface-2);
+  border: 1px dashed var(--line-strong);
+}
+.swatch-row + .field-hint {
+  margin-top: 6px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.field-hint {
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+.field-error {
+  margin: 0;
+  color: var(--p5);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Inline add-row used by the Access page (email + role + add button). */
+.inline-add {
+  display: grid;
+  grid-template-columns: 1fr 140px auto;
+  gap: 8px;
+  align-items: end;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.inline-add .field { margin: 0; }
+.inline-add input,
+.inline-add select {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+/* ============================================================
    Mobile splash (< 1024px)
    Desktop-only product in v1. Hidden on desktop; shown below 1024.
    The app shell mirrors the inverse so only one renders at a time.
