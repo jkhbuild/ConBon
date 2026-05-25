@@ -1,0 +1,55 @@
+# ConBon — Caddy reverse proxy + Let's Encrypt TLS.
+#
+# Caddy listens on :80, :443, and :443/udp (HTTP/3). The :80 vhost
+# auto-redirects to :443. ACME account + issued certs land in the
+# caddy_data volume so they survive container restarts.
+#
+# Iteration tip: while validating DNS / firewall, uncomment the staging
+# `acme_ca` below. Let's Encrypt's prod issuer rate-limits at 5
+# duplicate cert issuances per week — easy to hit while iterating.
+
+{
+	email {$ACME_EMAIL}
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+{$DOMAIN} {
+	header {
+		# 1y HSTS — only crank up once the deploy is stable. Add `preload`
+		# once you're ready to submit to the HSTS preload list.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# SSE pipe — bypasses the catch-all encoder + disables any buffering
+	# Caddy might otherwise apply to the response body. flush_interval -1
+	# forwards each chunk the moment Next.js writes it; without it, the
+	# `data: …\n\n` frames would queue until the buffer fills and the
+	# client wouldn't see real-time events. This handle runs INSTEAD of
+	# the catch-all below for matched requests, so `encode` never wraps
+	# the SSE response.
+	@sse path /api/events
+	handle @sse {
+		reverse_proxy app:3000 {
+			flush_interval -1
+			transport http {
+				# Long-lived stream — never time out waiting on response headers.
+				response_header_timeout 0
+			}
+		}
+	}
+
+	# Everything else.
+	handle {
+		encode zstd gzip
+		reverse_proxy app:3000
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

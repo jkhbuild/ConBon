@@ -30,7 +30,10 @@ playwright-report/
 # docs and planning (not needed at runtime)
 *.md
 PLAN.md
+docs/
 reference/prototype/
+.local/
+.claude/
 
 # editor / OS cruft
 .DS_Store

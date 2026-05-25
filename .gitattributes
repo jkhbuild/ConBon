@@ -1,0 +1,9 @@
+* text=auto
+
+# Pin LF on files that run inside Linux containers — CRLF would break
+# the shebang line of shell scripts and confuse some Docker tooling.
+*.sh text eol=lf
+Dockerfile text eol=lf
+Caddyfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

@@ -1,0 +1,105 @@
+# ConBon — production stack.
+#
+# Three long-running services (postgres, app, caddy) and one one-shot
+# (migrate) that exits before app starts. Bring up with:
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# The first boot takes ~2 min: build images, postgres init, migrate deploy,
+# app boot, Caddy ACME handshake. Subsequent restarts skip everything
+# except the app boot.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: conbon-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-conbon}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-conbon}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # NOTE: no host port published. Only the in-network services (app,
+    # migrate, the backup script via `docker compose exec`) reach
+    # postgres — never the public internet.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-conbon} -d ${POSTGRES_DB:-conbon}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  migrate:
+    build:
+      context: .
+      target: migrator
+    image: conbon-migrate:latest
+    container_name: conbon-migrate
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # One-shot — applies pending migrations and exits. App waits on
+    # `service_completed_successfully` so a failed migration prevents
+    # the app from starting against a schema it doesn't expect.
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runner
+    image: conbon-app:latest
+    container_name: conbon-app
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:?NEXTAUTH_URL is required}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      BOOTSTRAP_MANAGER_EMAIL: ${BOOTSTRAP_MANAGER_EMAIL:?BOOTSTRAP_MANAGER_EMAIL is required}
+      # Auth.js dev bypass is gated on NODE_ENV !== "production" inside
+      # auth.ts, so AUTH_DEV_USER_EMAIL is intentionally omitted here.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # Node-based healthcheck so we don't need curl/wget in the runner image.
+    # /api/health is in the proxy matcher exclusion list — no session required.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "require('http').get('http://127.0.0.1:3000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: conbon-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3 (QUIC)
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN is required}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # caddy_data holds the ACME account + issued certs — losing it means
+      # re-issuing on next boot, which can hit Let's Encrypt rate limits.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
