@@ -227,7 +227,7 @@ input, select, textarea {
 
 .topbar-count {
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--ink-2);
   margin-right: 6px;
 }
 
@@ -525,7 +525,7 @@ input, select, textarea {
 }
 .lane-role {
   font-size: 12px;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 .lane-stats {
   margin-left: auto;
@@ -1344,7 +1344,7 @@ input, select, textarea {
 }
 .role-pill.is-manager .role-pill-tag {
   background: color-mix(in srgb, var(--p5) 22%, transparent);
-  color: var(--p5);
+  color: var(--ink);
 }
 .role-pill.is-admin .role-pill-tag {
   background: color-mix(in srgb, var(--p3) 28%, transparent);

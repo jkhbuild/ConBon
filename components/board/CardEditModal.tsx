@@ -67,17 +67,28 @@ type DraftState = {
 };
 
 function toDateInput(d: Date): string {
-  // YYYY-MM-DD for <input type="date">. Use local-tz components so the
-  // user sees the same calendar date they picked.
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+  // YYYY-MM-DD for <input type="date">. Use UTC accessors: `@db.Date`
+  // columns round-trip as UTC-midnight Date objects, and the previous
+  // local-tz accessors caused a one-day drift west of UTC (user picked
+  // May 21, modal re-opened showing May 20, saving produced a phantom
+  // "May 21 → May 20" audit diff).
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+function fromDateInput(s: string): Date {
+  // Parse YYYY-MM-DD as UTC midnight so the value round-trips with
+  // toDateInput cleanly. `new Date("2026-05-21")` already parses as UTC
+  // per spec, but constructing via Date.UTC makes the intent obvious.
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
 }
 
 function addDays(d: Date, n: number): Date {
   const out = new Date(d);
-  out.setDate(out.getDate() + n);
+  out.setUTCDate(out.getUTCDate() + n);
   return out;
 }
 
@@ -207,7 +218,7 @@ export function CardEditModal() {
       ? effectivePriority(editingCard)
       : effectivePriority({
           priorityOverride: draft.priorityOverride,
-          assignmentDate: new Date(draft.assignmentDate),
+          assignmentDate: fromDateInput(draft.assignmentDate),
         });
 
   const open = mode !== null;
@@ -228,8 +239,8 @@ export function CardEditModal() {
         contractId: draft.contractId,
         type: draft.type,
         assigneeId: draft.assigneeId,
-        assignmentDate: new Date(draft.assignmentDate),
-        dueDate: new Date(draft.dueDate),
+        assignmentDate: fromDateInput(draft.assignmentDate),
+        dueDate: fromDateInput(draft.dueDate),
         priorityOverride: draft.priorityOverride,
         blockerNote:
           draft.blockerNote.trim().length === 0
@@ -242,8 +253,8 @@ export function CardEditModal() {
         contractId: draft.contractId,
         type: draft.type,
         assigneeId: draft.assigneeId,
-        assignmentDate: new Date(draft.assignmentDate),
-        dueDate: new Date(draft.dueDate),
+        assignmentDate: fromDateInput(draft.assignmentDate),
+        dueDate: fromDateInput(draft.dueDate),
         priorityOverride: draft.priorityOverride,
         blockerNote:
           draft.blockerNote.trim().length === 0

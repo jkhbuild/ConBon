@@ -38,6 +38,8 @@ coverage/
 .nyc_output/
 test-results/
 playwright-report/
+playwright/.auth/
+.playwright-mcp/
 
 # local postgres data volume (Phase 2)
 .data/
