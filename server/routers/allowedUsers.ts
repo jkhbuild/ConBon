@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Role } from "@prisma/client";
 import { router, managerProcedure } from "@/lib/trpc/trpc";
+import { writeAudit } from "@/lib/audit";
 
 // AllowedUser router — gates who can sign in via the NextAuth signIn
 // callback (auth.ts checks AllowedUser.email).
@@ -19,6 +20,11 @@ import { router, managerProcedure } from "@/lib/trpc/trpc";
 // Email is case-folded + trimmed on insert (same shape as the signIn
 // callback's lookup) so the unique constraint catches duplicates by the
 // caller's intent rather than by punctuation.
+//
+// Phase 10 — add / remove write AuditLog rows. Phase 8's NOTIFY triggers
+// still don't fire on AllowedUser (deliberate — change cadence is low and
+// removed users have to re-attempt sign-in anyway), but the audit trail
+// captures who granted/revoked access for compliance.
 
 const cuidSchema = z.string().min(1);
 const emailSchema = z
@@ -44,16 +50,39 @@ export const allowedUsersRouter = router({
   }),
 
   add: managerProcedure.input(addInput).mutation(async ({ ctx, input }) => {
-    return ctx.db.allowedUser.create({
-      data: {
-        email: input.email,
-        role: input.role,
-        addedById: ctx.userId,
-      },
+    return ctx.db.$transaction(async (tx) => {
+      const created = await tx.allowedUser.create({
+        data: {
+          email: input.email,
+          role: input.role,
+          addedById: ctx.userId,
+        },
+      });
+      await writeAudit(tx, {
+        actorId: ctx.userId,
+        entityType: "AllowedUser",
+        entityId: created.id,
+        action: "create",
+        before: null,
+        after: created,
+      });
+      return created;
     });
   }),
 
   remove: managerProcedure.input(removeInput).mutation(async ({ ctx, input }) => {
-    return ctx.db.allowedUser.delete({ where: { id: input.id } });
+    return ctx.db.$transaction(async (tx) => {
+      const before = await tx.allowedUser.findUniqueOrThrow({ where: { id: input.id } });
+      const deleted = await tx.allowedUser.delete({ where: { id: input.id } });
+      await writeAudit(tx, {
+        actorId: ctx.userId,
+        entityType: "AllowedUser",
+        entityId: input.id,
+        action: "delete",
+        before,
+        after: null,
+      });
+      return deleted;
+    });
   }),
 });

@@ -17,6 +17,7 @@ import {
   type PriorityLevel,
 } from "@/lib/priority";
 import { useOptimisticListMutation } from "@/lib/hooks/useOptimisticListMutation";
+import { HistoryButton } from "@/components/audit/HistoryButton";
 
 // CardEditModal — Radix Dialog port of reference/prototype/app.jsx
 // TaskModal. Drives two flows:
@@ -465,18 +466,28 @@ export function CardEditModal() {
           </div>
 
           <div className="modal-foot">
-            {mode === "edit" && (
-              <button
-                type="button"
-                className="btn-ghost btn-danger"
-                onClick={handleArchive}
-                style={{ marginRight: "auto" }}
-              >
-                Archive task
-              </button>
+            {mode === "edit" && editingCard && (
+              <>
+                <button
+                  type="button"
+                  className="btn-ghost btn-danger"
+                  onClick={handleArchive}
+                >
+                  Archive task
+                </button>
+                <HistoryButton
+                  entityType="Card"
+                  entityId={editingCard.id}
+                  entityName={editingCard.title}
+                />
+              </>
             )}
             <Dialog.Close asChild>
-              <button type="button" className="btn-ghost">
+              <button
+                type="button"
+                className="btn-ghost"
+                style={mode === "edit" ? { marginLeft: "auto" } : undefined}
+              >
                 Cancel
               </button>
             </Dialog.Close>

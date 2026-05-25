@@ -47,14 +47,19 @@ enum TaskType {
 }
 
 model Person {
-  id        String   @id @default(cuid())
-  name      String
-  email     String?  @unique // used for NextAuth sign-in matching
-  role      Role     @default(EMPLOYEE)
-  color     String // hex (#rrggbb); palette enforced at the app layer, not at DB
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String    @id @default(cuid())
+  name       String
+  email      String?   @unique // used for NextAuth sign-in matching
+  role       Role      @default(EMPLOYEE)
+  color      String // hex (#rrggbb); palette enforced at the app layer, not at DB
+  active     Boolean   @default(true)
+  // High-water mark for the bell badge — the most recent moment this user
+  // acknowledged their notifications. audit.listForUser({ since }) defaults
+  // to lastSeenAt and prefs.markRead bumps it to now(). Nullable for fresh
+  // accounts so the first sign-in shows every event affecting them.
+  lastSeenAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   assignedCards Card[]          @relation("CardAssignee")
   allowlistedBy AllowedUser[]   @relation("AllowedUserAddedBy")

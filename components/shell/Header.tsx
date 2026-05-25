@@ -4,6 +4,7 @@ import type { Role } from "@prisma/client";
 import { trpc } from "@/lib/trpc/client";
 import { useTheme } from "./ThemeProvider";
 import { signOutAction } from "@/app/(app)/_actions/signOut";
+import { BellMenu } from "@/components/notifications/BellMenu";
 
 // The shell header. Client component so the theme toggle, open-task counter,
 // and role pill can all live in one place. The counter reads cards.list via
@@ -15,6 +16,7 @@ import { signOutAction } from "@/app/(app)/_actions/signOut";
 // SessionProvider just to render a name + role badge.
 
 export type Viewer = {
+  id: string;
   name: string;
   role: Role;
 };
@@ -77,16 +79,7 @@ export function Header({ viewer }: Props) {
         </span>
       )}
 
-      {/* Notifications bell placeholder — Phase 10 wires the dropdown. */}
-      <button
-        type="button"
-        className="icon-btn"
-        aria-label="Notifications (not yet available)"
-        disabled
-        title="Notifications arrive in Phase 10"
-      >
-        <BellIcon />
-      </button>
+      {viewer && <BellMenu viewerId={viewer.id} />}
 
       <button
         type="button"
@@ -134,19 +127,3 @@ function SunIcon() {
   );
 }
 
-function BellIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-    </svg>
-  );
-}

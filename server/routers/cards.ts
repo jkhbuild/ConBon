@@ -2,6 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { TaskType } from "@prisma/client";
 import { router, protectedProcedure } from "@/lib/trpc/trpc";
+import { writeAudit } from "@/lib/audit";
 
 // Cards router.
 //
@@ -21,6 +22,12 @@ import { router, protectedProcedure } from "@/lib/trpc/trpc";
 // cards assigned to them. Admin + Manager can touch any. Backlog cards
 // (assigneeId IS NULL) are not "owned" by anyone, so Employees can't
 // claim them directly — Admin/Manager assigns them out.
+//
+// Phase 10 — every mutation is wrapped in $transaction and writes an
+// AuditLog row via writeAudit. The before/after rows are captured with
+// the same `include: { assignee, contract }` shape returned to the
+// client, so the History UI can resolve assignee/contract names from
+// the audit row without an extra fetch.
 
 const cuidSchema = z.string().min(1);
 const taskTypeSchema = z.nativeEnum(TaskType);
@@ -58,6 +65,8 @@ const cardMoveInput = z.object({
 
 const cardIdInput = z.object({ id: cuidSchema });
 
+const CARD_INCLUDE = { assignee: true, contract: true } as const;
+
 // True when the role lacks the privilege to mutate a card not owned by
 // the current user. Admin + Manager bypass the ownership check.
 function isEmployee(role: "EMPLOYEE" | "ADMIN" | "MANAGER"): boolean {
@@ -68,10 +77,7 @@ export const cardsRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
     return ctx.db.card.findMany({
       where: { archivedAt: null },
-      include: {
-        assignee: true,
-        contract: true,
-      },
+      include: CARD_INCLUDE,
       orderBy: [{ assigneeId: { sort: "asc", nulls: "first" } }, { position: "asc" }],
     });
   }),
@@ -79,51 +85,69 @@ export const cardsRouter = router({
   listArchived: protectedProcedure.query(async ({ ctx }) => {
     return ctx.db.card.findMany({
       where: { archivedAt: { not: null } },
-      include: {
-        assignee: true,
-        contract: true,
-      },
+      include: CARD_INCLUDE,
       orderBy: { archivedAt: "desc" },
     });
   }),
 
   move: protectedProcedure.input(cardMoveInput).mutation(async ({ ctx, input }) => {
     return ctx.db.$transaction(async (tx) => {
-      const card = await tx.card.findUnique({ where: { id: input.id } });
-      if (!card) throw new TRPCError({ code: "NOT_FOUND", message: "Card not found" });
-      if (card.archivedAt) {
+      const before = await tx.card.findUnique({
+        where: { id: input.id },
+        include: CARD_INCLUDE,
+      });
+      if (!before) throw new TRPCError({ code: "NOT_FOUND", message: "Card not found" });
+      if (before.archivedAt) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot move an archived card" });
       }
-      if (isEmployee(ctx.role) && card.assigneeId !== ctx.userId) {
+      if (isEmployee(ctx.role) && before.assigneeId !== ctx.userId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Not your card" });
       }
-      return tx.card.update({
+      const after = await tx.card.update({
         where: { id: input.id },
         data: {
           assigneeId: input.toAssigneeId,
           position: input.toPosition,
         },
-        include: { assignee: true, contract: true },
+        include: CARD_INCLUDE,
       });
+      await writeAudit(tx, {
+        actorId: ctx.userId,
+        entityType: "Card",
+        entityId: input.id,
+        action: "move",
+        before,
+        after,
+      });
+      return after;
     });
   }),
 
   update: protectedProcedure.input(cardUpdateInput).mutation(async ({ ctx, input }) => {
     const { id, ...patch } = input;
-    if (isEmployee(ctx.role)) {
-      const card = await ctx.db.card.findUnique({
+    return ctx.db.$transaction(async (tx) => {
+      const before = await tx.card.findUnique({
         where: { id },
-        select: { assigneeId: true },
+        include: CARD_INCLUDE,
       });
-      if (!card) throw new TRPCError({ code: "NOT_FOUND", message: "Card not found" });
-      if (card.assigneeId !== ctx.userId) {
+      if (!before) throw new TRPCError({ code: "NOT_FOUND", message: "Card not found" });
+      if (isEmployee(ctx.role) && before.assigneeId !== ctx.userId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Not your card" });
       }
-    }
-    return ctx.db.card.update({
-      where: { id },
-      data: patch,
-      include: { assignee: true, contract: true },
+      const after = await tx.card.update({
+        where: { id },
+        data: patch,
+        include: CARD_INCLUDE,
+      });
+      await writeAudit(tx, {
+        actorId: ctx.userId,
+        entityType: "Card",
+        entityId: id,
+        action: "update",
+        before,
+        after,
+      });
+      return after;
     });
   }),
 
@@ -132,66 +156,102 @@ export const cardsRouter = router({
     const fourteenDaysOut = new Date(today);
     fourteenDaysOut.setDate(fourteenDaysOut.getDate() + 14);
 
-    // Append to the end of the destination bucket (Backlog if assigneeId is null).
-    const tail = await ctx.db.card.findFirst({
-      where: { assigneeId: input.assigneeId, archivedAt: null },
-      orderBy: { position: "desc" },
-      select: { position: true },
-    });
-    const position = (tail?.position ?? 0) + 1024;
+    return ctx.db.$transaction(async (tx) => {
+      // Append to the end of the destination bucket (Backlog if assigneeId is null).
+      // Tail read lives in the same tx so a concurrent create can't pick
+      // the same position.
+      const tail = await tx.card.findFirst({
+        where: { assigneeId: input.assigneeId, archivedAt: null },
+        orderBy: { position: "desc" },
+        select: { position: true },
+      });
+      const position = (tail?.position ?? 0) + 1024;
 
-    return ctx.db.card.create({
-      data: {
-        title: input.title,
-        contractId: input.contractId,
-        type: input.type,
-        assigneeId: input.assigneeId,
-        assignmentDate: input.assignmentDate ?? today,
-        dueDate: input.dueDate ?? fourteenDaysOut,
-        priorityOverride: input.priorityOverride ?? null,
-        blockerNote: input.blockerNote ?? null,
-        position,
-      },
-      include: { assignee: true, contract: true },
+      const created = await tx.card.create({
+        data: {
+          title: input.title,
+          contractId: input.contractId,
+          type: input.type,
+          assigneeId: input.assigneeId,
+          assignmentDate: input.assignmentDate ?? today,
+          dueDate: input.dueDate ?? fourteenDaysOut,
+          priorityOverride: input.priorityOverride ?? null,
+          blockerNote: input.blockerNote ?? null,
+          position,
+        },
+        include: CARD_INCLUDE,
+      });
+      await writeAudit(tx, {
+        actorId: ctx.userId,
+        entityType: "Card",
+        entityId: created.id,
+        action: "create",
+        before: null,
+        after: created,
+      });
+      return created;
     });
   }),
 
   archive: protectedProcedure.input(cardIdInput).mutation(async ({ ctx, input }) => {
-    if (isEmployee(ctx.role)) {
-      const card = await ctx.db.card.findUnique({
+    return ctx.db.$transaction(async (tx) => {
+      const before = await tx.card.findUnique({
         where: { id: input.id },
-        select: { assigneeId: true },
+        include: CARD_INCLUDE,
       });
-      if (!card) throw new TRPCError({ code: "NOT_FOUND", message: "Card not found" });
-      if (card.assigneeId !== ctx.userId) {
+      if (!before) throw new TRPCError({ code: "NOT_FOUND", message: "Card not found" });
+      if (isEmployee(ctx.role) && before.assigneeId !== ctx.userId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Not your card" });
       }
-    }
-    return ctx.db.card.update({
-      where: { id: input.id },
-      data: { archivedAt: new Date() },
-      include: { assignee: true, contract: true },
+      const after = await tx.card.update({
+        where: { id: input.id },
+        data: { archivedAt: new Date() },
+        include: CARD_INCLUDE,
+      });
+      await writeAudit(tx, {
+        actorId: ctx.userId,
+        entityType: "Card",
+        entityId: input.id,
+        action: "archive",
+        before,
+        after,
+      });
+      return after;
     });
   }),
 
   restore: protectedProcedure.input(cardIdInput).mutation(async ({ ctx, input }) => {
     // Restored cards go to the end of their assignee bucket — position may
     // have collided with an active card while this one was archived.
-    const card = await ctx.db.card.findUniqueOrThrow({ where: { id: input.id } });
-    if (isEmployee(ctx.role) && card.assigneeId !== ctx.userId) {
-      throw new TRPCError({ code: "FORBIDDEN", message: "Not your card" });
-    }
-    const tail = await ctx.db.card.findFirst({
-      where: { assigneeId: card.assigneeId, archivedAt: null },
-      orderBy: { position: "desc" },
-      select: { position: true },
-    });
-    const position = (tail?.position ?? 0) + 1024;
+    return ctx.db.$transaction(async (tx) => {
+      const before = await tx.card.findUniqueOrThrow({
+        where: { id: input.id },
+        include: CARD_INCLUDE,
+      });
+      if (isEmployee(ctx.role) && before.assigneeId !== ctx.userId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not your card" });
+      }
+      const tail = await tx.card.findFirst({
+        where: { assigneeId: before.assigneeId, archivedAt: null },
+        orderBy: { position: "desc" },
+        select: { position: true },
+      });
+      const position = (tail?.position ?? 0) + 1024;
 
-    return ctx.db.card.update({
-      where: { id: input.id },
-      data: { archivedAt: null, position },
-      include: { assignee: true, contract: true },
+      const after = await tx.card.update({
+        where: { id: input.id },
+        data: { archivedAt: null, position },
+        include: CARD_INCLUDE,
+      });
+      await writeAudit(tx, {
+        actorId: ctx.userId,
+        entityType: "Card",
+        entityId: input.id,
+        action: "restore",
+        before,
+        after,
+      });
+      return after;
     });
   }),
 });
