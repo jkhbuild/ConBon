@@ -1,0 +1,52 @@
+# ConBon — pull-request + non-main branch CI.
+#
+# Fast checks: lint, typecheck, next build. Runs in ~2 min on a fresh
+# checkout (~30s with the npm cache warm). Deploy pipeline lives in
+# deploy.yml and re-runs these same checks before pushing images, so this
+# workflow ignores main to avoid duplicating that work.
+#
+# Playwright smoke tests land in Phase 14 alongside the @playwright/test
+# install + e2e specs; this workflow stays lint/typecheck/build only until
+# then.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Dummy DATABASE_URL across the whole job:
+#   - `npm ci` postinstall fires `prisma generate`; prisma.config.ts is on
+#     disk (full repo checkout), so its `env("DATABASE_URL")` call resolves
+#     strictly at load time.
+#   - `next build` evaluates lib/db.ts which validates the URL eagerly.
+# Neither path actually opens a connection.
+env:
+  DATABASE_URL: postgresql://build:build@localhost:5432/build
+
+jobs:
+  check:
+    name: Lint, typecheck, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm run typecheck
+
+      - run: npm run build
