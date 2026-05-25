@@ -56,7 +56,7 @@ export function Column({
         </div>
         <div>
           <div className="col-title">{title}</div>
-          <div style={{ fontSize: 11, color: "var(--ink-3)" }}>{subtitle}</div>
+          <div style={{ fontSize: 11, color: "var(--ink-2)" }}>{subtitle}</div>
         </div>
         <div className="col-sub">{cards.length}</div>
         <NewCardButton assigneeId={assigneeId} />

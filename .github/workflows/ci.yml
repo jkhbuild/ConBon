@@ -1,13 +1,14 @@
 # ConBon — pull-request + non-main branch CI.
 #
-# Fast checks: lint, typecheck, next build. Runs in ~2 min on a fresh
-# checkout (~30s with the npm cache warm). Deploy pipeline lives in
-# deploy.yml and re-runs these same checks before pushing images, so this
-# workflow ignores main to avoid duplicating that work.
+# Two jobs in parallel:
+#   - `check`: lint + typecheck + next build (~2 min, no DB).
+#   - `e2e`: Playwright smoke suite against a real Postgres service container
+#     (~3-4 min including browser install + dev-server compile).
 #
-# Playwright smoke tests land in Phase 14 alongside the @playwright/test
-# install + e2e specs; this workflow stays lint/typecheck/build only until
-# then.
+# Both fire on PR + non-main branch pushes. Deploy pipeline (deploy.yml)
+# re-runs `check` on main but skips `e2e` — the e2e suite already gated
+# the merge through PR; re-running on the merge commit adds 4 minutes
+# for very little signal.
 
 name: CI
 
@@ -21,20 +22,19 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Dummy DATABASE_URL across the whole job:
-#   - `npm ci` postinstall fires `prisma generate`; prisma.config.ts is on
-#     disk (full repo checkout), so its `env("DATABASE_URL")` call resolves
-#     strictly at load time.
-#   - `next build` evaluates lib/db.ts which validates the URL eagerly.
-# Neither path actually opens a connection.
-env:
-  DATABASE_URL: postgresql://build:build@localhost:5432/build
-
 jobs:
   check:
     name: Lint, typecheck, build
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Dummy DATABASE_URL across the whole job:
+    #   - `npm ci` postinstall fires `prisma generate`; prisma.config.ts is on
+    #     disk (full repo checkout), so its `env("DATABASE_URL")` call resolves
+    #     strictly at load time.
+    #   - `next build` evaluates lib/db.ts which validates the URL eagerly.
+    # Neither path actually opens a connection.
+    env:
+      DATABASE_URL: postgresql://build:build@localhost:5432/build
     steps:
       - uses: actions/checkout@v4
 
@@ -50,3 +50,82 @@ jobs:
       - run: npm run typecheck
 
       - run: npm run build
+
+  e2e:
+    name: Playwright smoke tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: conbon
+          POSTGRES_PASSWORD: conbon
+          POSTGRES_DB: conbon
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U conbon -d conbon"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://conbon:conbon@localhost:5432/conbon
+      # Ephemeral CI secret — JWT signing only; the runner DB is throwaway.
+      NEXTAUTH_SECRET: ci-only-jwt-signing-secret-not-for-prod
+      # Dev-bypass identity. The auth.ts gate requires NODE_ENV !== "production"
+      # AND AUTH_DEV_USER_EMAIL set. `next dev` runs as development by default.
+      AUTH_DEV_USER_EMAIL: e2e@conbon.test
+      # First-boot bootstrap inserts this email as MANAGER in AllowedUser —
+      # the dev-bypass user lands with manager privileges so the admin specs
+      # can exercise the Manager-only flows.
+      BOOTSTRAP_MANAGER_EMAIL: e2e@conbon.test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browsers + system deps
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps only (cached browsers)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+
+      - name: Seed dev data
+        run: npx prisma db seed
+
+      - name: Run Playwright suite
+        run: npm run test:e2e
+
+      - name: Upload Playwright HTML report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
