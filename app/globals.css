@@ -457,7 +457,7 @@ input, select, textarea {
 .col-sub {
   margin-left: auto;
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--ink-2);
   background: var(--chip-bg);
   padding: 2px 8px;
   border-radius: 999px;

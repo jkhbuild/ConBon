@@ -21,11 +21,12 @@ test.describe("a11y", () => {
 
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-      // Person-color avatars use prototype-default white text; legibility
-      // depends on the assignee's chosen palette swatch. Excluded from the
-      // gate — switching to dynamic luminance-based text color is a v2
-      // design decision, not a Phase-14 fix.
+      // Person-color avatars (columns + swimlanes layouts) use prototype-default
+      // white text; legibility depends on the assignee's chosen palette swatch.
+      // Excluded from the gate — switching to dynamic luminance-based text
+      // color is a v2 design decision, not a Phase-14 fix.
       .exclude(".lane-avatar")
+      .exclude(".col-avatar")
       .analyze();
 
     const serious = results.violations.filter(

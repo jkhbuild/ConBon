@@ -171,10 +171,16 @@ export function CardEditModal() {
 
   const [draft, setDraft] = useState<DraftState | null>(null);
 
-  // Seed the draft when the modal opens. For edit, depend on openCardId.
-  // For create, depend on creatingForAssigneeId + a snapshot of contracts
-  // (we need at least one contract to pick a default). Re-seeding on
-  // every cards.list patch would clobber in-progress user edits.
+  // Seed/clear the draft on modal-open transitions.
+  //
+  // Three effects, one per branch, so each effect's deps are minimal and
+  // unrelated cache patches can't re-seed and clobber user input. The
+  // previous single-effect form had `contracts.length` in its deps and
+  // would re-seed the edit draft when `contracts.list` settled mid-modal
+  // (visible in CI's cold dev-server boot — user typed a new title, then
+  // contracts arrived and the effect re-seeded from the original card).
+  //
+  // Edit: seed once per openCardId change.
   useEffect(() => {
     if (mode === "edit" && editingCard) {
       setDraft({
@@ -187,7 +193,19 @@ export function CardEditModal() {
         priorityOverride: editingCard.priorityOverride,
         blockerNote: editingCard.blockerNote ?? "",
       });
-    } else if (mode === "create" && contracts.length > 0) {
+    }
+    // editingCard intentionally omitted from deps — its object identity
+    // changes on every cards.list patch; openCardId is the stable
+    // open-modal signal we want to react to.
+  }, [mode, openCardId]);
+
+  // Create: seed when the create slot opens AND contracts are available.
+  // Includes contracts.length in deps so late-arriving contracts (cold
+  // dev-server boot) get picked up. Re-seed in this mode is harmless —
+  // the modal closes immediately on save/cancel, so there's no
+  // open-edit state to clobber.
+  useEffect(() => {
+    if (mode === "create" && contracts.length > 0) {
       const today = new Date();
       setDraft({
         title: "",
@@ -202,12 +220,15 @@ export function CardEditModal() {
         priorityOverride: null,
         blockerNote: "",
       });
-    } else {
+    }
+  }, [mode, creatingForAssigneeId, contracts.length]);
+
+  // Clear the draft on close.
+  useEffect(() => {
+    if (mode === null) {
       setDraft(null);
     }
-    // Intentionally narrow deps — seeding should only respond to mode
-    // transitions and contract availability, not to every cache patch.
-  }, [mode, openCardId, creatingForAssigneeId, contracts.length]);
+  }, [mode]);
 
   if (!mode || !draft) return null;
 
