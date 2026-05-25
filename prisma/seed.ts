@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
+import { PALETTE } from "../lib/palette";
 
 // Dev-only seed. Mirrors reference/prototype/data.jsx PEOPLE + CONTRACTS
 // + the 15 active seed tasks. Refuses to run when NODE_ENV=production.
@@ -33,12 +34,15 @@ function addDays(base: Date, n: number): Date {
   return new Date(base.getTime() + n * DAY_MS);
 }
 
-// People + accent colors verbatim from reference/prototype/data.jsx
+// People + accent colors verbatim from reference/prototype/data.jsx.
+// Colors reference the shared PALETTE so the Admin color picker and the
+// seed share one source of truth — the first four palette entries are
+// the prototype's seeded colors in order.
 const PEOPLE = [
-  { slug: "justin", name: "Justin Park", color: "#d68aa6" },
-  { slug: "swati", name: "Swati Iyer", color: "#8b6f4d" },
-  { slug: "michael", name: "Michael Brennan", color: "#7e9bb8" },
-  { slug: "francisco", name: "Francisco Aguilar", color: "#7ea687" },
+  { slug: "justin", name: "Justin Park", color: PALETTE[0].hex },
+  { slug: "swati", name: "Swati Iyer", color: PALETTE[1].hex },
+  { slug: "michael", name: "Michael Brennan", color: PALETTE[2].hex },
+  { slug: "francisco", name: "Francisco Aguilar", color: PALETTE[3].hex },
 ] as const;
 
 type PersonSlug = (typeof PEOPLE)[number]["slug"];
