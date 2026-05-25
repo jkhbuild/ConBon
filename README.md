@@ -66,10 +66,12 @@ Verify: `docker compose -f docker-compose.prod.yml ps` shows three services runn
 
 Two workflows under `.github/workflows/`:
 
-- `ci.yml` — runs on pull requests and feature-branch pushes. Installs deps, lints, typechecks, and runs `next build`. ~2 min cold, ~30s warm.
+- `ci.yml` — runs on pull requests and feature-branch pushes. Installs deps, lints, typechecks, runs `next build`, and runs the Playwright e2e suite against a Postgres service container. ~2–4 min.
 - `deploy.yml` — runs on push to `main` and on manual dispatch. Re-runs the CI checks, builds the runner + migrator images, pushes them to `ghcr.io/jkhbuild/conbon-app` and `ghcr.io/jkhbuild/conbon-migrate` tagged with both the commit SHA and `latest`, then SSHes to the VPS and runs `scripts/deploy.sh <sha>`.
 
 End-to-end deploy time on the merge commit is ~5 min: ~2 min for the checks, ~2 min for the Docker build+push (cached layers shave a chunk off after the first run), ~30s for the SSH + `compose pull` + `up`.
+
+> **Heads-up before the first VPS:** `deploy.yml`'s `deploy` job will be red on every push to `main` until the secrets in the next section exist + the VPS is provisioned. The `check` and `build-and-push` jobs still succeed (CI gating, images pushed to GHCR), so this is the expected steady state during pre-launch — not a regression. Don't gate it behind `if: secrets.* != ''` or comment out the deploy job; the failure is the prompt to do the VPS setup.
 
 **GitHub repo secrets** (Settings → Secrets and variables → Actions → Repository secrets):
 
