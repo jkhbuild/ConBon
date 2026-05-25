@@ -52,9 +52,17 @@ export function useRealtimeSync() {
           case "Card":
             void utils.cards.list.invalidate();
             void utils.cards.listArchived.invalidate();
+            // Card events drive the bell badge + toast pipeline. The
+            // listForUser refetch is what the Toast component diffs to
+            // pick new events; unreadCount is the badge.
+            void utils.audit.unreadCount.invalidate();
+            void utils.audit.listForUser.invalidate();
             break;
           case "Person":
             void utils.people.list.invalidate();
+            // Person changes can affect the viewer (role change, deactivate).
+            void utils.audit.unreadCount.invalidate();
+            void utils.audit.listForUser.invalidate();
             break;
           case "Contract":
             void utils.contracts.list.invalidate();
