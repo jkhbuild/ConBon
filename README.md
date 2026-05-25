@@ -60,6 +60,49 @@ The first `up` does, in order: build the app + migrator images (~3 min on CX22),
 
 Verify: `docker compose -f docker-compose.prod.yml ps` shows three services running and `migrate` exited 0. Browse to `https://<DOMAIN>`, sign in as the bootstrap manager via Google, populate People + Contracts + AllowedUsers from `/admin`.
 
+> Once GitHub Actions secrets are configured (next section), subsequent deploys run automatically on push to `main`. The local `--build` path above stays as a fallback for the very first boot or for offline debugging.
+
+### Continuous deployment
+
+Two workflows under `.github/workflows/`:
+
+- `ci.yml` — runs on pull requests and feature-branch pushes. Installs deps, lints, typechecks, and runs `next build`. ~2 min cold, ~30s warm.
+- `deploy.yml` — runs on push to `main` and on manual dispatch. Re-runs the CI checks, builds the runner + migrator images, pushes them to `ghcr.io/jkhbuild/conbon-app` and `ghcr.io/jkhbuild/conbon-migrate` tagged with both the commit SHA and `latest`, then SSHes to the VPS and runs `scripts/deploy.sh <sha>`.
+
+End-to-end deploy time on the merge commit is ~5 min: ~2 min for the checks, ~2 min for the Docker build+push (cached layers shave a chunk off after the first run), ~30s for the SSH + `compose pull` + `up`.
+
+**GitHub repo secrets** (Settings → Secrets and variables → Actions → Repository secrets):
+
+| Name | Value |
+|---|---|
+| `DEPLOY_HOST` | VPS hostname or IP (e.g. `conbon.example.com`) |
+| `DEPLOY_USER` | SSH login user with write access to `/opt/conbon` and Docker (e.g. `deploy`) |
+| `DEPLOY_SSH_KEY` | Private key matching a `~/.ssh/authorized_keys` entry for `DEPLOY_USER` on the VPS. Generate fresh: `ssh-keygen -t ed25519 -f conbon-deploy -C "github-actions"` — paste the private key (`conbon-deploy`) here, push the public key (`conbon-deploy.pub`) to the VPS |
+| `DEPLOY_FINGERPRINT` | *(strongly recommended)* SHA256 fingerprint of the VPS's SSH host key — pins the connection against MITM. Generate from any workstation that already trusts the host: `ssh-keyscan -t ed25519 <host> \| ssh-keygen -lf - \| awk '{print $2}'`. Leave unset to fall back to `StrictHostKeyChecking=no` (works but MITM-vulnerable) |
+
+**GitHub repo variable** (same screen, "Variables" tab): `DOMAIN` — used as the deploy URL on the workflow's environment page.
+
+The built-in `GITHUB_TOKEN` (provided by Actions) handles GHCR auth via the workflow's `permissions: { packages: write }` block — no PAT to manage.
+
+**One-time VPS prep** before the first CI deploy:
+
+```bash
+# As root or sudo
+adduser --disabled-password deploy
+usermod -aG docker deploy
+mkdir -p /opt/conbon && chown deploy:deploy /opt/conbon
+
+# As deploy
+git clone https://github.com/jkhbuild/ConBon.git /opt/conbon
+cd /opt/conbon
+cp .env.production.example .env.production && vi .env.production    # fill it in
+
+# Optionally do the manual first deploy here too so :latest exists on GHCR
+# before relying on CI for subsequent pushes.
+```
+
+Add the SSH public key to `/home/deploy/.ssh/authorized_keys`. Confirm with `ssh -i conbon-deploy deploy@<host> 'docker ps'` from a workstation; expect zero output and exit code 0.
+
 ### Iterating against Let's Encrypt without burning rate limits
 
 LE caps "duplicate certificates" at 5/week. While validating DNS or the Caddyfile, uncomment the staging ACME line in `Caddyfile`:
@@ -72,12 +115,32 @@ Re-comment and `docker compose -f docker-compose.prod.yml restart caddy` once th
 
 ### Updates
 
+CI handles updates automatically — push to `main` (typically by merging a PR), GitHub Actions runs `deploy.yml`, and the new commit is live in ~5 min.
+
+For a manual update (no CI), SSH to the VPS and run the same script the workflow does:
+
 ```bash
+cd /opt/conbon
 git pull
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+bash scripts/deploy.sh           # uses :latest from GHCR
+# or pin to a specific commit's image:
+bash scripts/deploy.sh <commit-sha>
 ```
 
-Compose rebuilds the migrator + app images; `migrate` re-runs (idempotent), `app` waits on `migrate` completing before restarting.
+`scripts/deploy.sh` pulls the matching images from GHCR, runs `docker compose up -d --remove-orphans` (re-runs `migrate` then restarts `app`), and prunes dangling images. If the images aren't on GHCR yet (offline, GHCR down, or first deploy without CI), fall back to `docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build` to build locally — the `build:` stanzas alongside `image:` in `docker-compose.prod.yml` keep that path working.
+
+### Rollback
+
+GHCR keeps every commit-SHA tag, so rollback is a script invocation against the previous image:
+
+```bash
+ssh deploy@<host>
+cd /opt/conbon
+# Find the previous deploy's SHA in GitHub Actions → Deploy workflow runs.
+bash scripts/deploy.sh <previous-sha>
+```
+
+The `app` container flips to the rolled-back image in seconds. The `migrate` one-shot re-runs against the older schema; `prisma migrate deploy` is a no-op when no migrations are pending, so unless the rollback crosses a migration boundary there's nothing to undo. **For rollbacks across migrations**, restore the database from the most recent `pg_dump` before re-running the script — Prisma has no `migrate down` and forward-only is the safe default. (Test that the rollback path works end-to-end on staging before relying on it in prod.)
 
 ### Backups
 

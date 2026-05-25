@@ -31,10 +31,14 @@ services:
       start_period: 30s
 
   migrate:
+    # CI pushes `ghcr.io/jkhbuild/conbon-migrate:<sha>` + `:latest`; the
+    # deploy script exports IMAGE_TAG=<sha> for atomic-per-commit deploys.
+    # Local-stack smoke testing still works via `docker compose build` —
+    # compose names the built image with the same tag.
+    image: ghcr.io/jkhbuild/conbon-migrate:${IMAGE_TAG:-latest}
     build:
       context: .
       target: migrator
-    image: conbon-migrate:latest
     container_name: conbon-migrate
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
@@ -47,10 +51,13 @@ services:
     restart: "no"
 
   app:
+    # CI pushes `ghcr.io/jkhbuild/conbon-app:<sha>` + `:latest`; the deploy
+    # script exports IMAGE_TAG=<sha> for atomic-per-commit deploys. Local
+    # `docker compose build` still produces an image with this same tag.
+    image: ghcr.io/jkhbuild/conbon-app:${IMAGE_TAG:-latest}
     build:
       context: .
       target: runner
-    image: conbon-app:latest
     container_name: conbon-app
     restart: unless-stopped
     environment:
