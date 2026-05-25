@@ -2,7 +2,11 @@
 
 import type { Role } from "@prisma/client";
 import { trpc } from "@/lib/trpc/client";
-import { useTheme } from "./ThemeProvider";
+import {
+  useBoardLayout,
+  useSetBoardLayout,
+  useTheme,
+} from "./PreferencesProvider";
 import { signOutAction } from "@/app/(app)/_actions/signOut";
 import { BellMenu } from "@/components/notifications/BellMenu";
 
@@ -81,6 +85,8 @@ export function Header({ viewer }: Props) {
 
       {viewer && <BellMenu viewerId={viewer.id} />}
 
+      {viewer && <LayoutToggle />}
+
       <button
         type="button"
         className="icon-btn"
@@ -91,6 +97,30 @@ export function Header({ viewer }: Props) {
         {theme === "soft" ? <MoonIcon /> : <SunIcon />}
       </button>
     </header>
+  );
+}
+
+// Split into its own component so the useBoardLayout / useSetBoardLayout
+// calls only run when PreferencesBridge is in the tree (signed-in routes
+// only; the bridge throws if used outside its provider). The parent
+// Header gates this on `viewer`.
+function LayoutToggle() {
+  const layout = useBoardLayout();
+  const setLayout = useSetBoardLayout();
+  const next = layout === "columns" ? "swimlanes" : "columns";
+  const label =
+    layout === "columns" ? "Switch to swim lanes" : "Switch to columns";
+  return (
+    <button
+      type="button"
+      className="icon-btn"
+      onClick={() => setLayout(next)}
+      aria-label={label}
+      title={label}
+      aria-pressed={layout === "swimlanes"}
+    >
+      {layout === "columns" ? <LanesIcon /> : <ColumnsIcon />}
+    </button>
   );
 }
 
@@ -123,6 +153,42 @@ function SunIcon() {
     >
       <circle cx="12" cy="12" r="4" />
       <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+    </svg>
+  );
+}
+
+function ColumnsIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="5" height="16" rx="1" />
+      <rect x="9.5" y="4" width="5" height="16" rx="1" />
+      <rect x="16" y="4" width="5" height="16" rx="1" />
+    </svg>
+  );
+}
+
+function LanesIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="4" y="3" width="16" height="5" rx="1" />
+      <rect x="4" y="9.5" width="16" height="5" rx="1" />
+      <rect x="4" y="16" width="16" height="5" rx="1" />
     </svg>
   );
 }

@@ -28,7 +28,8 @@ import { Column } from "./Column";
 import { SwimLane } from "./SwimLane";
 import { computePosition } from "@/lib/position";
 import { useOptimisticListMutation } from "@/lib/hooks/useOptimisticListMutation";
-import { useBoardLayout, useUIStore } from "@/stores/uiStore";
+import { useUIStore } from "@/stores/uiStore";
+import { useBoardLayout } from "@/components/shell/PreferencesProvider";
 
 // Board — Phase 6: live mutations via tRPC + optimistic cache updates.
 // The local-useState mirror from Phase 5 is gone; the React Query cache
