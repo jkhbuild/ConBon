@@ -25,5 +25,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/((?!api/auth|api/trpc|api/events|signin|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api/auth|api/trpc|api/events|api/health|signin|_next/static|_next/image|favicon.ico).*)"],
 };
