@@ -411,7 +411,14 @@ input, select, textarea {
 .board-wrap {
   flex: 1;
   overflow: auto;
-  padding: 18px 22px 32px;
+  /* Heavy bottom padding so the lowest card sits well clear of the
+     viewport bottom. Radix ContextMenu hardcodes side="right" + align=
+     "start" + crossAxis shift disabled, so the menu can't auto-flip to
+     open upward when there's no room below — the only reliable fix is
+     to keep cards out of the viewport-bottom strip in the first place.
+     160px guarantees room for the standard ~150px priority context
+     menu plus the Clear-override row (~190px) plus collisionPadding. */
+  padding: 18px 22px 160px;
 }
 
 /* Layout A — column lanes */

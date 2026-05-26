@@ -72,7 +72,15 @@ export function CardContextMenu({ card, children }: Props) {
         {children}
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
-        <ContextMenu.Content className="ctx-menu">
+        {/* Radix ContextMenu hardcodes side="right" + align="start" and
+            wires shift({ crossAxis: false }) into Popper, so the menu
+            CANNOT auto-flip or shift along the vertical axis when it
+            overflows the viewport bottom — passing `side="bottom"` etc.
+            is silently ignored. We mitigate by keeping cards clear of
+            the bottom strip via heavy padding-bottom on .board-wrap;
+            collisionPadding is kept so Radix doesn't paint the menu
+            flush against the viewport edge when it does fit. */}
+        <ContextMenu.Content className="ctx-menu" collisionPadding={12}>
           <div className="ctx-section">Set priority</div>
           <div className="ctx-priority-row">
             {([1, 2, 3, 4, 5] as PriorityLevel[]).map((lvl) => {

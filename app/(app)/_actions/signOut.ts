@@ -1,12 +1,19 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { signOut } from "@/auth";
 
-// Server action consumed by the Header sign-out form. Lives in the
-// (app) route group so its proximity to the only caller is obvious; the
-// generic Auth.js `signOut` is wrapped only to bake in `redirectTo` so
-// the button is one-click.
+// Auth.js v5's `signOut({ redirectTo })` from a Server Action issues its
+// own redirect, but when the action is wrapped in a Radix
+// DropdownMenu.Item the menu's onSelect default behavior closes the
+// portal and React unmounts the form before the redirect protocol
+// completes — the browser sees nothing and the user stays on /active.
+// Clearing the session cookie with `redirect: false` and then calling
+// next/navigation's `redirect()` ourselves takes the navigation through
+// React's own Server Action redirect protocol, which the router
+// reliably honors regardless of the surrounding UI.
 
 export async function signOutAction() {
-  await signOut({ redirectTo: "/signin" });
+  await signOut({ redirect: false });
+  redirect("/signin");
 }
