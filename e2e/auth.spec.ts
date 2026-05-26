@@ -8,7 +8,8 @@ import { test, expect } from "@playwright/test";
 //  - /active redirects to /signin when not authenticated
 //  - dev-bypass button is visible (proves AUTH_DEV_USER_EMAIL + non-prod)
 //  - clicking the button signs in and lands on /active
-//  - the header shows the viewer's Admin role + a Sign out button
+//  - the header shows the viewer's Admin role on the account-menu trigger,
+//    and opening the menu surfaces a Sign out option
 //
 // Production / Google flow is intentionally out of scope — that path
 // requires real OAuth credentials and a configured redirect URI.
@@ -34,9 +35,17 @@ test.describe("auth", () => {
     await devBypassBtn.click();
     await page.waitForURL("**/active", { timeout: 30_000 });
 
-    // Header shell renders the role pill + sign-out button when authenticated.
-    await expect(page.getByRole("button", { name: /sign out/i })).toBeVisible();
-    // The bootstrap user is seeded as ADMIN via BOOTSTRAP_MANAGER_EMAIL.
+    // Header renders the role pill as the account-menu trigger when
+    // authenticated. The bootstrap user is seeded as ADMIN via
+    // BOOTSTRAP_MANAGER_EMAIL, so the trigger's tag text is "ADMIN".
+    const accountMenu = page.getByRole("button", { name: /account menu/i });
+    await expect(accountMenu).toBeVisible();
     await expect(page.getByText(/^admin$/i).first()).toBeVisible();
+
+    // Opening the menu surfaces the Sign out affordance (Radix
+    // DropdownMenu unmounts the content while closed, so this query
+    // has to come AFTER the click).
+    await accountMenu.click();
+    await expect(page.getByRole("menuitem", { name: /sign out/i })).toBeVisible();
   });
 });

@@ -17,7 +17,9 @@ setup("authenticate as dev-bypass user", async ({ page }) => {
 
   await button.click();
   await page.waitForURL("**/active", { timeout: 30_000 });
-  await expect(page.getByRole("button", { name: /sign out/i })).toBeVisible();
+  // Account-menu trigger (replaces the Phase 14 inline sign-out button —
+  // signed-in users now reach Sign out via the dropdown).
+  await expect(page.getByRole("button", { name: /account menu/i })).toBeVisible();
 
   await page.context().storageState({ path: authFile });
 });
