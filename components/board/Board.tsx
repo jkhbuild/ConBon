@@ -14,8 +14,10 @@ import {
   KeyboardSensor,
   PointerSensor,
   closestCorners,
+  pointerWithin,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -84,6 +86,26 @@ export function Board({ initialCards, people }: BoardProps) {
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+
+  // Multi-container Sortable collision detection.
+  //
+  // `closestCorners` alone misbehaves when columns have very different heights
+  // or when a target column is empty: every card is also a droppable (via
+  // useSortable), so a dense stack of cards in a tall neighbor wins the
+  // closest-corners race against a short or empty column's outer rectangle.
+  // The fix — canonical @dnd-kit pattern for multi-container Sortable, used in
+  // the maintainer's own MultipleContainers example — is to prefer
+  // `pointerWithin`: if the cursor is literally inside any droppable, that
+  // droppable wins regardless of corner geometry. Falls back to
+  // `closestCorners` only when the cursor is in the gap between droppables,
+  // which keeps fast drag flicks from dropping into nowhere.
+  const collisionDetectionStrategy: CollisionDetection = useCallback((args) => {
+    const pointerCollisions = pointerWithin(args);
+    if (pointerCollisions.length > 0) {
+      return pointerCollisions;
+    }
+    return closestCorners(args);
+  }, []);
 
   // Optimistic patch for the move mutation. Updates assigneeId, position,
   // and the assignee relation (so the card's footer chip swaps color
@@ -278,7 +300,7 @@ export function Board({ initialCards, people }: BoardProps) {
         // depending on render order.
         id="conbon-board"
         sensors={sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={collisionDetectionStrategy}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
