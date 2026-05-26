@@ -1335,8 +1335,9 @@ input, select, textarea {
   letter-spacing: 0.02em;
 }
 
-/* Role pill — name + role badge in the header (replaces Phase 4/7
-   placeholder) and on admin row chips. Tier-tinted via modifier. */
+/* Role pill — name + role badge in the header (also doubles as the
+   account-menu dropdown trigger) and on admin row chips. Tier-tinted
+   via modifier. */
 .role-pill {
   display: inline-flex;
   align-items: center;
@@ -1372,6 +1373,59 @@ input, select, textarea {
 .role-pill.is-scheduler .role-pill-tag {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
   color: var(--ink-2);
+}
+
+/* Role pill rendered as a <button> when it doubles as the account-menu
+   trigger. Resets browser button styles + adds interactivity affordances.
+   `font: inherit` keeps the pill's typography consistent across the
+   <span>/<button> swap. */
+button.role-pill-trigger {
+  font: inherit;
+  cursor: pointer;
+}
+button.role-pill-trigger:hover {
+  border-color: var(--line-strong);
+}
+button.role-pill-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Account menu — dropdown anchored to the role pill trigger. Slimmer
+   shell than .bell-dropdown; one-line items styled to match. */
+.account-dropdown {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  min-width: 180px;
+  padding: 6px 0;
+  z-index: 60;
+}
+.account-item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  outline: none;
+}
+.account-item:hover,
+.account-item[data-highlighted] {
+  background: var(--chip-bg);
+}
+.account-item-danger {
+  color: var(--p5);
+}
+.account-separator {
+  height: 1px;
+  background: var(--line);
+  margin: 6px 0;
 }
 
 /* Palette swatch picker — constrained color chooser used in People +

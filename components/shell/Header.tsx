@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import type { Role } from "@prisma/client";
 import { trpc } from "@/lib/trpc/client";
 import {
@@ -66,21 +68,7 @@ export function Header({ viewer }: Props) {
       </div>
 
       {viewer ? (
-        <>
-          <span className={`role-pill ${ROLE_CLASS[viewer.role]}`}>
-            <span className="role-pill-name">{viewer.name}</span>
-            <span className="role-pill-tag">{ROLE_LABEL[viewer.role]}</span>
-          </span>
-          <form action={signOutAction}>
-            <button
-              type="submit"
-              className="btn-row"
-              title="Sign out"
-            >
-              Sign out
-            </button>
-          </form>
-        </>
+        <AccountMenu viewer={viewer} />
       ) : (
         <span className="role-pill-placeholder" aria-label="Not signed in">
           Signed-out
@@ -101,6 +89,67 @@ export function Header({ viewer }: Props) {
         {theme === "soft" ? <MoonIcon /> : <SunIcon />}
       </button>
     </header>
+  );
+}
+
+// The name+role pill doubles as an account menu trigger. Items:
+//   - Admin → /admin/people, gated to viewer.role === "ADMIN" (mirrors
+//     the tightened admin/layout.tsx server gate; deep-linking still
+//     bounces non-Admin to the friendly 403 panel)
+//   - Archive → /archive, available to every signed-in viewer
+//   - Sign out → posts the existing signOutAction (server action that
+//     calls Auth.js signOut with redirectTo:"/signin"); folded into the
+//     menu so the standalone form button in the header goes away
+//
+// Sign out keeps a real <form action=signOutAction> wrapper so the
+// server action retains its React form-action semantics (no need to
+// invoke the action via a client onSelect, which complicates the redirect
+// path through Next 16's router).
+function AccountMenu({ viewer }: { viewer: Viewer }) {
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          className={`role-pill role-pill-trigger ${ROLE_CLASS[viewer.role]}`}
+          aria-label="Account menu"
+        >
+          <span className="role-pill-name">{viewer.name}</span>
+          <span className="role-pill-tag">{ROLE_LABEL[viewer.role]}</span>
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          className="account-dropdown"
+          align="end"
+          sideOffset={8}
+        >
+          {viewer.role === "ADMIN" && (
+            <DropdownMenu.Item asChild>
+              <Link href="/admin/people" className="account-item">
+                Admin
+              </Link>
+            </DropdownMenu.Item>
+          )}
+          <DropdownMenu.Item asChild>
+            <Link href="/archive" className="account-item">
+              Archive
+            </Link>
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator className="account-separator" />
+          <DropdownMenu.Item asChild>
+            <form action={signOutAction}>
+              <button
+                type="submit"
+                className="account-item account-item-danger"
+              >
+                Sign out
+              </button>
+            </form>
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }
 
