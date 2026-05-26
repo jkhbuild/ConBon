@@ -2,9 +2,14 @@ import "server-only";
 import { db } from "@/lib/db";
 
 // First-boot bootstrap. When AllowedUser is empty AND BOOTSTRAP_MANAGER_EMAIL
-// is set, insert that email with role MANAGER. The bootstrap manager then
-// signs in via Google (or dev bypass) and populates the rest of the
-// allowlist through the Phase 9 admin UI.
+// is set, insert that email with role ADMIN. The bootstrap admin then signs
+// in via Google (or dev bypass) and populates the rest of the allowlist
+// through the admin UI.
+//
+// The env var keeps the historical BOOTSTRAP_MANAGER_EMAIL name to avoid
+// touching live secrets — only the role the row gets assigned changed
+// when the role enum was reshaped to the Admin / Commercial Manager /
+// {Analyst,Estimator,Scheduler} ladder.
 //
 // Idempotent: once any AllowedUser row exists, this is a no-op. Safe to
 // call on every process start.
@@ -28,9 +33,9 @@ export async function bootstrap(): Promise<void> {
     if (existing) return;
 
     await db.allowedUser.create({
-      data: { email, role: "MANAGER" },
+      data: { email, role: "ADMIN" },
     });
-    console.log(`[bootstrap] Seeded MANAGER allowlist row for ${email}`);
+    console.log(`[bootstrap] Seeded ADMIN allowlist row for ${email}`);
   } catch (err) {
     console.warn("[bootstrap] Skipping — DB not reachable yet:", err);
     bootstrapped = false;

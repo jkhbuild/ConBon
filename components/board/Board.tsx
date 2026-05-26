@@ -336,7 +336,7 @@ function ColumnsLayout({ groups, people }: LayoutProps) {
           columnId={p.id}
           assigneeId={p.id}
           title={p.name.split(" ")[0] ?? p.name}
-          subtitle={`${p.role.charAt(0)}${p.role.slice(1).toLowerCase()} · In Progress`}
+          subtitle={`${humanizeRole(p.role)} · In Progress`}
           avatarColor={p.color}
           avatarText={initialsOf(p.name)}
           cards={groups.get(p.id) ?? []}
@@ -366,7 +366,7 @@ function SwimLanesLayout({ groups, people }: LayoutProps) {
           columnId={p.id}
           assigneeId={p.id}
           name={p.name}
-          role={`${p.role.charAt(0)}${p.role.slice(1).toLowerCase()} · In Progress`}
+          role={`${humanizeRole(p.role)} · In Progress`}
           avatarColor={p.color}
           avatarText={initialsOf(p.name)}
           cards={groups.get(p.id) ?? []}
@@ -382,4 +382,14 @@ function initialsOf(name: string): string {
     .map((s) => s[0])
     .slice(0, 2)
     .join("");
+}
+
+// Humanize an enum role value (e.g. "COMMERCIAL_MANAGER" → "Commercial Manager")
+// for the column / swim-lane subtitle. Underscore segments title-case
+// independently so multi-word roles read cleanly.
+function humanizeRole(role: string): string {
+  return role
+    .split("_")
+    .map((w) => w.charAt(0) + w.slice(1).toLowerCase())
+    .join(" ");
 }

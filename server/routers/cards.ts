@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { TaskType } from "@prisma/client";
+import { TaskType, type Role } from "@prisma/client";
 import { router, protectedProcedure } from "@/lib/trpc/trpc";
 import { writeAudit } from "@/lib/audit";
 
@@ -18,10 +18,11 @@ import { writeAudit } from "@/lib/audit";
 //
 // Phase 7 — every procedure is `protectedProcedure` (signed-in users
 // only). Mutations that touch a specific card additionally enforce
-// strict ownership: Employees can only move / update / archive / restore
-// cards assigned to them. Admin + Manager can touch any. Backlog cards
-// (assigneeId IS NULL) are not "owned" by anyone, so Employees can't
-// claim them directly — Admin/Manager assigns them out.
+// strict ownership: bottom-tier roles (Analyst / Estimator / Scheduler)
+// can only move / update / archive / restore cards assigned to them.
+// Admin + Commercial Manager can touch any. Backlog cards (assigneeId
+// IS NULL) are not "owned" by anyone, so bottom-tier users can't claim
+// them directly — Admin / Commercial Manager assigns them out.
 //
 // Phase 10 — every mutation is wrapped in $transaction and writes an
 // AuditLog row via writeAudit. The before/after rows are captured with
@@ -68,9 +69,9 @@ const cardIdInput = z.object({ id: cuidSchema });
 const CARD_INCLUDE = { assignee: true, contract: true } as const;
 
 // True when the role lacks the privilege to mutate a card not owned by
-// the current user. Admin + Manager bypass the ownership check.
-function isEmployee(role: "EMPLOYEE" | "ADMIN" | "MANAGER"): boolean {
-  return role === "EMPLOYEE";
+// the current user. Admin + Commercial Manager bypass the ownership check.
+function isBottomTier(role: Role): boolean {
+  return role === "ANALYST" || role === "ESTIMATOR" || role === "SCHEDULER";
 }
 
 export const cardsRouter = router({
@@ -100,7 +101,7 @@ export const cardsRouter = router({
       if (before.archivedAt) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot move an archived card" });
       }
-      if (isEmployee(ctx.role) && before.assigneeId !== ctx.userId) {
+      if (isBottomTier(ctx.role) && before.assigneeId !== ctx.userId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Not your card" });
       }
       const after = await tx.card.update({
@@ -131,7 +132,7 @@ export const cardsRouter = router({
         include: CARD_INCLUDE,
       });
       if (!before) throw new TRPCError({ code: "NOT_FOUND", message: "Card not found" });
-      if (isEmployee(ctx.role) && before.assigneeId !== ctx.userId) {
+      if (isBottomTier(ctx.role) && before.assigneeId !== ctx.userId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Not your card" });
       }
       const after = await tx.card.update({
@@ -200,7 +201,7 @@ export const cardsRouter = router({
         include: CARD_INCLUDE,
       });
       if (!before) throw new TRPCError({ code: "NOT_FOUND", message: "Card not found" });
-      if (isEmployee(ctx.role) && before.assigneeId !== ctx.userId) {
+      if (isBottomTier(ctx.role) && before.assigneeId !== ctx.userId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Not your card" });
       }
       const after = await tx.card.update({
@@ -228,7 +229,7 @@ export const cardsRouter = router({
         where: { id: input.id },
         include: CARD_INCLUDE,
       });
-      if (isEmployee(ctx.role) && before.assigneeId !== ctx.userId) {
+      if (isBottomTier(ctx.role) && before.assigneeId !== ctx.userId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Not your card" });
       }
       const tail = await tx.card.findFirst({

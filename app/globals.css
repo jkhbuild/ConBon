@@ -1342,15 +1342,17 @@ input, select, textarea {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
   color: var(--ink-2);
 }
-.role-pill.is-manager .role-pill-tag {
+.role-pill.is-admin .role-pill-tag {
   background: color-mix(in srgb, var(--p5) 22%, transparent);
   color: var(--ink);
 }
-.role-pill.is-admin .role-pill-tag {
+.role-pill.is-commercial-manager .role-pill-tag {
   background: color-mix(in srgb, var(--p3) 28%, transparent);
   color: var(--ink);
 }
-.role-pill.is-employee .role-pill-tag {
+.role-pill.is-analyst .role-pill-tag,
+.role-pill.is-estimator .role-pill-tag,
+.role-pill.is-scheduler .role-pill-tag {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
   color: var(--ink-2);
 }

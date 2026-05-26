@@ -35,9 +35,11 @@ datasource db {
 }
 
 enum Role {
-  EMPLOYEE
+  ANALYST
+  ESTIMATOR
+  SCHEDULER
+  COMMERCIAL_MANAGER
   ADMIN
-  MANAGER
 }
 
 enum TaskType {
@@ -50,7 +52,7 @@ model Person {
   id         String    @id @default(cuid())
   name       String
   email      String?   @unique // used for NextAuth sign-in matching
-  role       Role      @default(EMPLOYEE)
+  role       Role      @default(ANALYST)
   color      String // hex (#rrggbb); palette enforced at the app layer, not at DB
   active     Boolean   @default(true)
   // High-water mark for the bell badge — the most recent moment this user
@@ -113,7 +115,7 @@ model Card {
 model AllowedUser {
   id        String   @id @default(cuid())
   email     String   @unique // stored lowercase; case-folded on insert
-  role      Role     @default(EMPLOYEE) // role to assign to the matching Person on first sign-in
+  role      Role     @default(ANALYST) // role to assign to the matching Person on first sign-in
   createdAt DateTime @default(now())
 
   addedById String?

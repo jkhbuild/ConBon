@@ -67,9 +67,11 @@ function fmtBool(value: unknown, trueLabel: string, falseLabel: string): string 
 }
 
 function fmtRole(value: unknown): string {
-  if (value === "EMPLOYEE") return "Employee";
+  if (value === "ANALYST") return "Analyst";
+  if (value === "ESTIMATOR") return "Estimator";
+  if (value === "SCHEDULER") return "Scheduler";
+  if (value === "COMMERCIAL_MANAGER") return "Commercial Manager";
   if (value === "ADMIN") return "Admin";
-  if (value === "MANAGER") return "Manager";
   return value == null ? "—" : String(value);
 }
 

@@ -30,15 +30,19 @@ type Props = {
 };
 
 const ROLE_LABEL: Record<Role, string> = {
-  EMPLOYEE: "Employee",
+  ANALYST: "Analyst",
+  ESTIMATOR: "Estimator",
+  SCHEDULER: "Scheduler",
+  COMMERCIAL_MANAGER: "Commercial Manager",
   ADMIN: "Admin",
-  MANAGER: "Manager",
 };
 
 const ROLE_CLASS: Record<Role, string> = {
-  EMPLOYEE: "is-employee",
+  ANALYST: "is-analyst",
+  ESTIMATOR: "is-estimator",
+  SCHEDULER: "is-scheduler",
+  COMMERCIAL_MANAGER: "is-commercial-manager",
   ADMIN: "is-admin",
-  MANAGER: "is-manager",
 };
 
 export function Header({ viewer }: Props) {

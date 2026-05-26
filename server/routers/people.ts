@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { Role } from "@prisma/client";
-import { router, protectedProcedure, adminProcedure } from "@/lib/trpc/trpc";
+import { router, protectedProcedure, commercialManagerProcedure } from "@/lib/trpc/trpc";
 import { isPaletteHex, PALETTE_DEFAULT_HEX } from "@/lib/palette";
 import { writeAudit } from "@/lib/audit";
 
@@ -11,7 +11,7 @@ import { writeAudit } from "@/lib/audit";
 // render in name order. `listAll` (Phase 9) includes inactives, active
 // first then name, so the Admin UI can show + reactivate them.
 //
-// Mutations (Phase 9) are all `adminProcedure` — both Admin and Manager
+// Mutations are `commercialManagerProcedure` — Admin and Commercial Manager
 // can edit People. Color is constrained to the shared palette; the default
 // gray (#888888) stamped by the auth signIn callback is also accepted so
 // freshly-onboarded users with no admin-assigned swatch can be updated
@@ -70,13 +70,13 @@ export const peopleRouter = router({
     });
   }),
 
-  listAll: adminProcedure.query(async ({ ctx }) => {
+  listAll: commercialManagerProcedure.query(async ({ ctx }) => {
     return ctx.db.person.findMany({
       orderBy: [{ active: "desc" }, { name: "asc" }],
     });
   }),
 
-  create: adminProcedure.input(peopleCreateInput).mutation(async ({ ctx, input }) => {
+  create: commercialManagerProcedure.input(peopleCreateInput).mutation(async ({ ctx, input }) => {
     return ctx.db.$transaction(async (tx) => {
       const created = await tx.person.create({
         data: {
@@ -98,16 +98,16 @@ export const peopleRouter = router({
     });
   }),
 
-  update: adminProcedure.input(peopleUpdateInput).mutation(async ({ ctx, input }) => {
+  update: commercialManagerProcedure.input(peopleUpdateInput).mutation(async ({ ctx, input }) => {
     const { id, ...patch } = input;
-    // Role promote/demote is Manager-only — Admin can edit name / email /
-    // color but not change someone's tier. The Phase 9 People admin UI
-    // hides the role select from Admin viewers, but enforce here too so
-    // a hand-crafted request can't sneak through.
-    if (patch.role !== undefined && ctx.role !== "MANAGER") {
+    // Role promote/demote is Admin-only — Commercial Manager can edit name /
+    // email / color but not change someone's tier. The People admin UI
+    // hides the role select from non-Admin viewers, but enforce here too
+    // so a hand-crafted request can't sneak through.
+    if (patch.role !== undefined && ctx.role !== "ADMIN") {
       throw new TRPCError({
         code: "FORBIDDEN",
-        message: "Only Manager can change roles",
+        message: "Only Admin can change roles",
       });
     }
     return ctx.db.$transaction(async (tx) => {
@@ -125,7 +125,7 @@ export const peopleRouter = router({
     });
   }),
 
-  deactivate: adminProcedure.input(idInput).mutation(async ({ ctx, input }) => {
+  deactivate: commercialManagerProcedure.input(idInput).mutation(async ({ ctx, input }) => {
     return ctx.db.$transaction(async (tx) => {
       const before = await tx.person.findUniqueOrThrow({ where: { id: input.id } });
       // Snapshot the cards that are about to be reassigned so we can emit
@@ -168,7 +168,7 @@ export const peopleRouter = router({
     });
   }),
 
-  reactivate: adminProcedure.input(idInput).mutation(async ({ ctx, input }) => {
+  reactivate: commercialManagerProcedure.input(idInput).mutation(async ({ ctx, input }) => {
     return ctx.db.$transaction(async (tx) => {
       const before = await tx.person.findUniqueOrThrow({ where: { id: input.id } });
       const after = await tx.person.update({
