@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import type { Role } from "@prisma/client";
 import { trpc } from "@/lib/trpc/client";
@@ -92,20 +93,28 @@ export function Header({ viewer }: Props) {
   );
 }
 
-// The name+role pill doubles as an account menu trigger. Items:
-//   - Admin → /admin/people, gated to viewer.role === "ADMIN" (mirrors
-//     the tightened admin/layout.tsx server gate; deep-linking still
-//     bounces non-Admin to the friendly 403 panel)
-//   - Archive → /archive, available to every signed-in viewer
+// The name+role pill doubles as an account menu trigger. Nav items are
+// context-aware: whichever route the viewer is currently on is hidden,
+// so the menu always offers somewhere new to go.
+//   - Active → /active, hidden on /active
+//   - Archive → /archive, hidden on /archive
+//   - Admin → /admin/people, gated to viewer.role === "ADMIN" and hidden
+//     on /admin/*. Mirrors the tightened admin/layout.tsx server gate;
+//     deep-linking still bounces non-Admin to the friendly 403 panel.
 //   - Sign out → posts the existing signOutAction (server action that
-//     calls Auth.js signOut with redirectTo:"/signin"); folded into the
-//     menu so the standalone form button in the header goes away
+//     clears the session and redirects to /signin via next/navigation)
 //
 // Sign out keeps a real <form action=signOutAction> wrapper so the
 // server action retains its React form-action semantics (no need to
 // invoke the action via a client onSelect, which complicates the redirect
 // path through Next 16's router).
 function AccountMenu({ viewer }: { viewer: Viewer }) {
+  const pathname = usePathname();
+  const onActive = pathname === "/active";
+  const onArchive = pathname === "/archive";
+  const onAdmin = pathname.startsWith("/admin");
+  const isAdmin = viewer.role === "ADMIN";
+
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
@@ -124,18 +133,27 @@ function AccountMenu({ viewer }: { viewer: Viewer }) {
           align="end"
           sideOffset={8}
         >
-          {viewer.role === "ADMIN" && (
+          {!onActive && (
+            <DropdownMenu.Item asChild>
+              <Link href="/active" className="account-item">
+                Active
+              </Link>
+            </DropdownMenu.Item>
+          )}
+          {!onArchive && (
+            <DropdownMenu.Item asChild>
+              <Link href="/archive" className="account-item">
+                Archive
+              </Link>
+            </DropdownMenu.Item>
+          )}
+          {isAdmin && !onAdmin && (
             <DropdownMenu.Item asChild>
               <Link href="/admin/people" className="account-item">
                 Admin
               </Link>
             </DropdownMenu.Item>
           )}
-          <DropdownMenu.Item asChild>
-            <Link href="/archive" className="account-item">
-              Archive
-            </Link>
-          </DropdownMenu.Item>
           <DropdownMenu.Separator className="account-separator" />
           <DropdownMenu.Item asChild>
             <form action={signOutAction}>
