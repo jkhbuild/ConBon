@@ -66,13 +66,16 @@ export const peopleRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
     return ctx.db.person.findMany({
       where: { active: true },
-      orderBy: { name: "asc" },
+      // Position is the admin-controlled board column order; name is the
+      // tie-breaker for rows that haven't been reordered yet (or two rows
+      // that ended up with the same legacy 0 default).
+      orderBy: [{ position: "asc" }, { name: "asc" }],
     });
   }),
 
   listAll: commercialManagerProcedure.query(async ({ ctx }) => {
     return ctx.db.person.findMany({
-      orderBy: [{ active: "desc" }, { name: "asc" }],
+      orderBy: [{ active: "desc" }, { position: "asc" }, { name: "asc" }],
     });
   }),
 
@@ -186,4 +189,51 @@ export const peopleRouter = router({
       return after;
     });
   }),
+
+  // Swap this person's position with their neighbor in the same active
+  // bucket (active rows reorder among active rows; inactive among inactive).
+  // Neighbor swap keeps the integers sequential without rebalance and means
+  // a click of ↑ on row N just exchanges N's position with N-1's. Both
+  // Person rows fire NOTIFY → SSE invalidation, so the Board re-fetches
+  // people.list and re-renders columns in the new order.
+  reorder: commercialManagerProcedure
+    .input(z.object({ id: cuidSchema, direction: z.enum(["up", "down"]) }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.db.$transaction(async (tx) => {
+        const self = await tx.person.findUniqueOrThrow({ where: { id: input.id } });
+        const neighbor = await tx.person.findFirst({
+          where: {
+            active: self.active,
+            id: { not: self.id },
+            position: input.direction === "up"
+              ? { lt: self.position }
+              : { gt: self.position },
+          },
+          orderBy: { position: input.direction === "up" ? "desc" : "asc" },
+        });
+        if (!neighbor) {
+          // Already at the end of the list — no-op, but return self so the
+          // optimistic UI doesn't have to special-case the boundary.
+          return { self, neighbor: null };
+        }
+        // Swap positions. Two-step via a sentinel to dodge the (position)
+        // unique-index trap if one ever gets added; safe even without it.
+        const tempPosition = -Math.abs(self.position) - 1_000_000;
+        await tx.person.update({ where: { id: self.id }, data: { position: tempPosition } });
+        await tx.person.update({ where: { id: neighbor.id }, data: { position: self.position } });
+        const updatedSelf = await tx.person.update({
+          where: { id: self.id },
+          data: { position: neighbor.position },
+        });
+        await writeAudit(tx, {
+          actorId: ctx.userId,
+          entityType: "Person",
+          entityId: self.id,
+          action: "update",
+          before: self,
+          after: updatedSelf,
+        });
+        return { self: updatedSelf, neighbor };
+      });
+    }),
 });

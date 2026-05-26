@@ -111,6 +111,31 @@ export function PeopleAdmin({ initialPeople, viewerRole }: Props) {
     },
   });
 
+  // Reorder is a neighbor-swap optimistic patch: swap the two rows' array
+  // positions AND their `position` integer values, so the cache sort by
+  // `position` keeps matching the visible order.
+  const reorderMutation = trpc.people.reorder.useMutation({
+    ...useOptimisticListMutation<
+      { id: string; direction: "up" | "down" },
+      Person
+    >(utils.people.listAll, (old, input) => {
+      const idx = old.findIndex((p) => p.id === input.id);
+      if (idx < 0) return old;
+      const self = old[idx]!;
+      const neighborIdx = input.direction === "up" ? idx - 1 : idx + 1;
+      const neighbor = old[neighborIdx];
+      if (!neighbor || neighbor.active !== self.active) return old;
+      const next = old.slice();
+      next[idx] = { ...neighbor, position: self.position };
+      next[neighborIdx] = { ...self, position: neighbor.position };
+      return next;
+    }),
+    onSettled: () => {
+      void utils.people.listAll.invalidate();
+      refreshSiblings();
+    },
+  });
+
   const createMutation = trpc.people.create.useMutation({
     onSettled: () => {
       void utils.people.listAll.invalidate();
@@ -154,67 +179,101 @@ export function PeopleAdmin({ initialPeople, viewerRole }: Props) {
           </DataTable.HeaderCell>
         </DataTable.Head>
         <DataTable.Body>
-          {people.map((p) => (
-            <DataTable.Row key={p.id} dim={!p.active}>
-              <DataTable.Cell>
-                <span
-                  className="avatar-sm"
-                  style={{ background: p.color }}
-                  aria-hidden="true"
-                >
-                  {initialsOf(p.name)}
-                </span>
-              </DataTable.Cell>
-              <DataTable.Cell>{p.name}</DataTable.Cell>
-              <DataTable.Cell>{p.email ?? "—"}</DataTable.Cell>
-              <DataTable.Cell>
-                <span className={`role-pill ${ROLE_CLASS[p.role]}`}>
-                  <span className="role-pill-tag">{ROLE_LABEL[p.role]}</span>
-                </span>
-              </DataTable.Cell>
-              <DataTable.Cell>
-                {p.active ? (
-                  <span style={{ color: "var(--accent)" }}>Active</span>
-                ) : (
-                  <span style={{ color: "var(--ink-3)" }}>Inactive</span>
-                )}
-              </DataTable.Cell>
-              <DataTable.Cell align="right">
-                <div className="row-actions">
-                  <button
-                    type="button"
-                    className="btn-row"
-                    onClick={() => setModal({ kind: "edit", person: p })}
+          {people.map((p, idx) => {
+            // Up / down are enabled only when there's a neighbor in the
+            // SAME active state — active rows reorder among active rows,
+            // inactive among inactive. Boundary rows (first / last of
+            // their group) have the button disabled.
+            const prev = people[idx - 1];
+            const next = people[idx + 1];
+            const canMoveUp = !!prev && prev.active === p.active;
+            const canMoveDown = !!next && next.active === p.active;
+            return (
+              <DataTable.Row key={p.id} dim={!p.active}>
+                <DataTable.Cell>
+                  <span
+                    className="avatar-sm"
+                    style={{ background: p.color }}
+                    aria-hidden="true"
                   >
-                    Edit
-                  </button>
+                    {initialsOf(p.name)}
+                  </span>
+                </DataTable.Cell>
+                <DataTable.Cell>{p.name}</DataTable.Cell>
+                <DataTable.Cell>{p.email ?? "—"}</DataTable.Cell>
+                <DataTable.Cell>
+                  <span className={`role-pill ${ROLE_CLASS[p.role]}`}>
+                    <span className="role-pill-tag">{ROLE_LABEL[p.role]}</span>
+                  </span>
+                </DataTable.Cell>
+                <DataTable.Cell>
                   {p.active ? (
+                    <span style={{ color: "var(--accent)" }}>Active</span>
+                  ) : (
+                    <span style={{ color: "var(--ink-3)" }}>Inactive</span>
+                  )}
+                </DataTable.Cell>
+                <DataTable.Cell align="right">
+                  <div className="row-actions">
                     <button
                       type="button"
-                      className="btn-row is-danger"
+                      className="btn-row btn-row-icon"
                       onClick={() =>
-                        deactivateMutation.mutate({ id: p.id })
+                        reorderMutation.mutate({ id: p.id, direction: "up" })
                       }
-                      disabled={deactivateMutation.isPending}
+                      disabled={!canMoveUp || reorderMutation.isPending}
+                      aria-label={`Move ${p.name} up`}
+                      title="Move up"
                     >
-                      Deactivate
+                      ↑
                     </button>
-                  ) : (
+                    <button
+                      type="button"
+                      className="btn-row btn-row-icon"
+                      onClick={() =>
+                        reorderMutation.mutate({ id: p.id, direction: "down" })
+                      }
+                      disabled={!canMoveDown || reorderMutation.isPending}
+                      aria-label={`Move ${p.name} down`}
+                      title="Move down"
+                    >
+                      ↓
+                    </button>
                     <button
                       type="button"
                       className="btn-row"
-                      onClick={() =>
-                        reactivateMutation.mutate({ id: p.id })
-                      }
-                      disabled={reactivateMutation.isPending}
+                      onClick={() => setModal({ kind: "edit", person: p })}
                     >
-                      Reactivate
+                      Edit
                     </button>
-                  )}
-                </div>
-              </DataTable.Cell>
-            </DataTable.Row>
-          ))}
+                    {p.active ? (
+                      <button
+                        type="button"
+                        className="btn-row is-danger"
+                        onClick={() =>
+                          deactivateMutation.mutate({ id: p.id })
+                        }
+                        disabled={deactivateMutation.isPending}
+                      >
+                        Deactivate
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn-row"
+                        onClick={() =>
+                          reactivateMutation.mutate({ id: p.id })
+                        }
+                        disabled={reactivateMutation.isPending}
+                      >
+                        Reactivate
+                      </button>
+                    )}
+                  </div>
+                </DataTable.Cell>
+              </DataTable.Row>
+            );
+          })}
         </DataTable.Body>
       </DataTable.Root>
       {people.length === 0 && (

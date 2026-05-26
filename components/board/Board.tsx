@@ -27,6 +27,7 @@ import { CardEditModal } from "./CardEditModal";
 import { Column } from "./Column";
 import { SwimLane } from "./SwimLane";
 import { computePosition } from "@/lib/position";
+import { effectivePriority } from "@/lib/priority";
 import { useOptimisticListMutation } from "@/lib/hooks/useOptimisticListMutation";
 import { useUIStore } from "@/stores/uiStore";
 import { useBoardLayout } from "@/components/shell/PreferencesProvider";
@@ -112,13 +113,19 @@ export function Board({ initialCards, people }: BoardProps) {
     useOptimisticListMutation<MoveInput, CardData>(utils.cards.list, movePatch),
   );
 
-  // Group cards by assignee, sort within group by position. Phase 5
-  // grouped by priority; Phase 6 makes position authoritative so drag
-  // within a column has visible effect.
+  // Group cards by assignee, then within each bucket sort by effective
+  // priority DESC (red 5 on top → green 1 on bottom) and tie-break with
+  // dueDate ASC (closest due first). Matches the prototype + the Phase 5
+  // behavior, restored on top of Phase 6's mutation pipeline: cross-column
+  // drag still fires cards.move, but within-column drag becomes a visual
+  // no-op because the auto-sort wins. Position stays on the row as the
+  // tie-tie-breaker so two cards at the same priority + dueDate render
+  // in a stable order.
   const groups = useMemo(() => {
     const map = new Map<string, CardData[]>();
     map.set(BACKLOG_KEY, []);
     for (const p of people) map.set(p.id, []);
+    const now = new Date();
     for (const c of cards) {
       const key = c.assigneeId ?? BACKLOG_KEY;
       let bucket = map.get(key);
@@ -129,7 +136,15 @@ export function Board({ initialCards, people }: BoardProps) {
       bucket.push(c);
     }
     for (const bucket of map.values()) {
-      bucket.sort((a, b) => a.position - b.position);
+      bucket.sort((a, b) => {
+        const pa = effectivePriority(a, now);
+        const pb = effectivePriority(b, now);
+        if (pa !== pb) return pb - pa;
+        const da = a.dueDate.getTime();
+        const db = b.dueDate.getTime();
+        if (da !== db) return da - db;
+        return a.position - b.position;
+      });
     }
     return map;
   }, [cards, people]);

@@ -118,10 +118,13 @@ async function main() {
   await db.person.deleteMany();
 
   console.log("→ Seeding people…");
+  // Position pre-set per PEOPLE array order so the dev board column order
+  // matches reference/prototype/data.jsx.
   const personIdBySlug = new Map<PersonSlug, string>();
-  for (const p of PEOPLE) {
+  for (let idx = 0; idx < PEOPLE.length; idx++) {
+    const p = PEOPLE[idx]!;
     const created = await db.person.create({
-      data: { name: p.name, color: p.color, role: p.role },
+      data: { name: p.name, color: p.color, role: p.role, position: idx + 1 },
     });
     personIdBySlug.set(p.slug, created.id);
   }
