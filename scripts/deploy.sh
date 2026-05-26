@@ -56,6 +56,30 @@ echo "==> Bringing stack up"
 #   - leave postgres + caddy running unless their definitions changed
 docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d --remove-orphans
 
+# Caddy bind-mounts the host's Caddyfile via a single-file bind
+# (`./Caddyfile:/etc/caddy/Caddyfile:ro` in docker-compose.prod.yml).
+# The deploy workflow does `git reset --hard origin/main` before
+# invoking this script; `reset --hard` replaces tracked files
+# atomically via rename, allocating a new inode. The container's
+# mount still references the OLD (now unlinked) inode, so Caddy
+# reads the pre-deploy file indefinitely — config changes are
+# silently ignored until the container is restarted. `up -d` above
+# doesn't restart caddy when its compose definition didn't change,
+# which is the common case for a Caddy-only edit.
+#
+# HEAD@{1} is the SHA the repo was at before the workflow's
+# `git reset --hard` (preserved by git's reflog). If Caddyfile
+# moved in that range, force a caddy restart so the bind mount
+# re-resolves to the current inode.
+#
+# Bails silently when there's no prior reflog entry (first deploy
+# on a fresh clone). See docs/gotchas.md "Post-v1: edge + deploy
+# gotchas" for the underlying inode mechanics.
+if git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -qx 'Caddyfile'; then
+  echo "==> Caddyfile changed in this deploy; restarting caddy to refresh its bind mount"
+  docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" restart caddy
+fi
+
 echo "==> Pruning dangling images"
 docker image prune -f >/dev/null
 
