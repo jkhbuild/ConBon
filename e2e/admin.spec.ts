@@ -37,8 +37,12 @@ test.describe.serial("admin: people + access", () => {
     await dialog.getByRole("button", { name: /create person/i }).click();
 
     await expect(dialog).toBeHidden();
+    // exact: true disambiguates the literal name cell from the ↑/↓ button
+    // cell in the same row (the buttons carry aria-label "Move <name> up"
+    // / "down", which getByRole("cell", { name }) treats as a match by
+    // accessible name otherwise).
     await expect(
-      page.getByRole("cell", { name: NEW_PERSON_NAME }),
+      page.getByRole("cell", { name: NEW_PERSON_NAME, exact: true }),
       "new person appears in the People table",
     ).toBeVisible();
   });

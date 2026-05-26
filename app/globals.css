@@ -1136,7 +1136,10 @@ input, select, textarea {
 /* Empty state */
 .empty-col {
   font-size: 12px;
-  color: var(--ink-3);
+  /* var(--ink-2) on var(--surface) clears WCAG AA (~6:1) where --ink-3
+     was 3.12:1 and failed the a11y suite. Same fix shape as Phase 14's
+     contrast bumps on .topbar-count / .lane-role. */
+  color: var(--ink-2);
   text-align: center;
   padding: 40px 8px;
   font-style: italic;
