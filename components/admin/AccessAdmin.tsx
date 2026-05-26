@@ -15,21 +15,27 @@ type Props = {
 };
 
 const ROLE_OPTIONS: { value: Role; label: string }[] = [
-  { value: "EMPLOYEE", label: "Employee" },
+  { value: "ANALYST", label: "Analyst" },
+  { value: "ESTIMATOR", label: "Estimator" },
+  { value: "SCHEDULER", label: "Scheduler" },
+  { value: "COMMERCIAL_MANAGER", label: "Commercial Manager" },
   { value: "ADMIN", label: "Admin" },
-  { value: "MANAGER", label: "Manager" },
 ];
 
 const ROLE_LABEL: Record<Role, string> = {
-  EMPLOYEE: "Employee",
+  ANALYST: "Analyst",
+  ESTIMATOR: "Estimator",
+  SCHEDULER: "Scheduler",
+  COMMERCIAL_MANAGER: "Commercial Manager",
   ADMIN: "Admin",
-  MANAGER: "Manager",
 };
 
 const ROLE_CLASS: Record<Role, string> = {
-  EMPLOYEE: "is-employee",
+  ANALYST: "is-analyst",
+  ESTIMATOR: "is-estimator",
+  SCHEDULER: "is-scheduler",
+  COMMERCIAL_MANAGER: "is-commercial-manager",
   ADMIN: "is-admin",
-  MANAGER: "is-manager",
 };
 
 const DATE_FMT = new Intl.DateTimeFormat("en-US", {
@@ -46,7 +52,7 @@ export function AccessAdmin({ initialRows, viewerEmail }: Props) {
   );
 
   const [draftEmail, setDraftEmail] = useState("");
-  const [draftRole, setDraftRole] = useState<Role>("EMPLOYEE");
+  const [draftRole, setDraftRole] = useState<Role>("ANALYST");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const addMutation = trpc.allowedUsers.add.useMutation({
@@ -55,7 +61,7 @@ export function AccessAdmin({ initialRows, viewerEmail }: Props) {
     },
     onSuccess: () => {
       setDraftEmail("");
-      setDraftRole("EMPLOYEE");
+      setDraftRole("ANALYST");
       setErrorMessage(null);
     },
     onError: (err) => {

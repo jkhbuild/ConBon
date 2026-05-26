@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { router, protectedProcedure, adminProcedure } from "@/lib/trpc/trpc";
+import { router, protectedProcedure, commercialManagerProcedure } from "@/lib/trpc/trpc";
 import { isPaletteHex } from "@/lib/palette";
 import { writeAudit } from "@/lib/audit";
 
@@ -9,9 +9,9 @@ import { writeAudit } from "@/lib/audit";
 // modal's contract picker and the board's contract filter chips.
 // `listAll` (Phase 9) includes inactives for the Admin UI.
 //
-// Mutations (Phase 9) are `adminProcedure`. Code matches the prototype's
-// shape: 1 uppercase letter + 5 digits (e.g. N36054). Color is optional;
-// when set it must come from the shared palette.
+// Mutations are `commercialManagerProcedure` (Admin + Commercial Manager).
+// Code matches the prototype's shape: 1 uppercase letter + 5 digits (e.g.
+// N36054). Color is optional; when set it must come from the shared palette.
 //
 // Deactivate just flips `active`. Existing cards keep their `contractId`
 // (the relation has onDelete: Restrict so the row can't be removed), and
@@ -57,13 +57,13 @@ export const contractsRouter = router({
     });
   }),
 
-  listAll: adminProcedure.query(async ({ ctx }) => {
+  listAll: commercialManagerProcedure.query(async ({ ctx }) => {
     return ctx.db.contract.findMany({
       orderBy: [{ active: "desc" }, { code: "asc" }],
     });
   }),
 
-  create: adminProcedure.input(contractCreateInput).mutation(async ({ ctx, input }) => {
+  create: commercialManagerProcedure.input(contractCreateInput).mutation(async ({ ctx, input }) => {
     return ctx.db.$transaction(async (tx) => {
       const created = await tx.contract.create({
         data: {
@@ -84,7 +84,7 @@ export const contractsRouter = router({
     });
   }),
 
-  update: adminProcedure.input(contractUpdateInput).mutation(async ({ ctx, input }) => {
+  update: commercialManagerProcedure.input(contractUpdateInput).mutation(async ({ ctx, input }) => {
     const { id, ...patch } = input;
     return ctx.db.$transaction(async (tx) => {
       const before = await tx.contract.findUniqueOrThrow({ where: { id } });
@@ -101,7 +101,7 @@ export const contractsRouter = router({
     });
   }),
 
-  deactivate: adminProcedure.input(idInput).mutation(async ({ ctx, input }) => {
+  deactivate: commercialManagerProcedure.input(idInput).mutation(async ({ ctx, input }) => {
     return ctx.db.$transaction(async (tx) => {
       const before = await tx.contract.findUniqueOrThrow({ where: { id: input.id } });
       const after = await tx.contract.update({
@@ -120,7 +120,7 @@ export const contractsRouter = router({
     });
   }),
 
-  reactivate: adminProcedure.input(idInput).mutation(async ({ ctx, input }) => {
+  reactivate: commercialManagerProcedure.input(idInput).mutation(async ({ ctx, input }) => {
     return ctx.db.$transaction(async (tx) => {
       const before = await tx.contract.findUniqueOrThrow({ where: { id: input.id } });
       const after = await tx.contract.update({

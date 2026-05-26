@@ -1,11 +1,11 @@
 import { test, expect } from "@playwright/test";
 
-// Phase 14 admin spec — Manager-only flows.
+// Phase 14 admin spec — Admin-only flows.
 //
 // Coverage:
-//  1. /admin/people lists the bootstrap manager
-//  2. Add a new Person via the Add-person modal (Employee role, default color)
-//  3. /admin/access shows the manager's own email; self-row Remove is disabled
+//  1. /admin/people lists the bootstrap admin
+//  2. Add a new Person via the Add-person modal (Analyst role, default color)
+//  3. /admin/access shows the admin's own email; self-row Remove is disabled
 //  4. Add a new email to the allowlist
 //  5. Verify the new email row renders in the list
 //
@@ -24,9 +24,9 @@ test.describe.serial("admin: people + access", () => {
 
     await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
 
-    // The bootstrap manager (AUTH_DEV_USER_EMAIL) must be in the table —
+    // The bootstrap admin (AUTH_DEV_USER_EMAIL) must be in the table —
     // they were upserted on first sign-in by the setup project.
-    await expect(page.getByText(/^manager$/i).first()).toBeVisible();
+    await expect(page.getByText(/^admin$/i).first()).toBeVisible();
 
     await page.getByRole("button", { name: /add person/i }).click();
 
@@ -50,7 +50,7 @@ test.describe.serial("admin: people + access", () => {
 
     // Exactly one Remove button is disabled — the self row. Asserting on
     // the disabled-count avoids selector ambiguity from the "Added by"
-    // column, which echoes the same email back when the manager added
+    // column, which echoes the same email back when the admin added
     // the row (Person.name defaults to the email for dev-bypass users).
     const disabledRemove = page.getByRole("button", {
       name: /^remove$/i,

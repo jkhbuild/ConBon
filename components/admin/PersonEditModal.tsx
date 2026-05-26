@@ -44,16 +44,18 @@ type Props = {
 };
 
 const ROLE_OPTIONS: { value: Role; label: string }[] = [
-  { value: "EMPLOYEE", label: "Employee" },
+  { value: "ANALYST", label: "Analyst" },
+  { value: "ESTIMATOR", label: "Estimator" },
+  { value: "SCHEDULER", label: "Scheduler" },
+  { value: "COMMERCIAL_MANAGER", label: "Commercial Manager" },
   { value: "ADMIN", label: "Admin" },
-  { value: "MANAGER", label: "Manager" },
 ];
 
 const EMPTY_DRAFT: Draft = {
   name: "",
   email: "",
   color: PALETTE[0]!.hex,
-  role: "EMPLOYEE",
+  role: "ANALYST",
 };
 
 export function PersonEditModal({
@@ -65,9 +67,10 @@ export function PersonEditModal({
 }: Props) {
   const mode = state.kind;
   const open = mode !== "closed";
-  // Manager can promote/demote; Admin sees the role as a read-only chip
-  // (the People router rejects role patches from non-Manager too).
-  const canEditRole = viewerRole === "MANAGER";
+  // Admin can promote/demote; Commercial Manager sees the role as a
+  // read-only chip (the People router rejects role patches from
+  // non-Admin too).
+  const canEditRole = viewerRole === "ADMIN";
 
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
 
@@ -210,7 +213,7 @@ export function PersonEditModal({
                 </select>
               ) : (
                 <p className="field-hint">
-                  Role: <strong>{draft.role}</strong>. Only Manager can
+                  Role: <strong>{draft.role}</strong>. Only Admin can
                   promote or demote.
                 </p>
               )}

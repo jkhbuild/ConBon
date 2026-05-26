@@ -8,11 +8,11 @@ import type { Context } from "./context";
 // over the wire intact — Prisma returns Date objects (createdAt, dueDate,
 // etc.), and we want those typed as Date on the client, not string.
 //
-// Procedure ladder:
-//   publicProcedure    — no auth (kept for future health checks etc.)
-//   protectedProcedure — any signed-in user; userId + role guaranteed non-null
-//   adminProcedure     — role in { ADMIN, MANAGER }
-//   managerProcedure   — role === MANAGER
+// Procedure ladder (5-role / 3-tier model):
+//   publicProcedure            — no auth (kept for future health checks etc.)
+//   protectedProcedure         — any signed-in user; userId + role guaranteed non-null
+//   commercialManagerProcedure — role in { ADMIN, COMMERCIAL_MANAGER }
+//   adminProcedure             — role === ADMIN
 //
 // Each guard narrows ctx.userId / ctx.role to non-null via the middleware
 // `next({ ctx })` pattern, so downstream resolvers don't need null checks.
@@ -33,20 +33,20 @@ const requireSession = t.middleware(({ ctx, next }) => {
   return next({ ctx: { ...ctx, userId: ctx.userId, role: ctx.role } });
 });
 
-const requireAdmin = requireSession.unstable_pipe(({ ctx, next }) => {
-  if (ctx.role !== "ADMIN" && ctx.role !== "MANAGER") {
+const requireCommercialManager = requireSession.unstable_pipe(({ ctx, next }) => {
+  if (ctx.role !== "ADMIN" && ctx.role !== "COMMERCIAL_MANAGER") {
     throw new TRPCError({ code: "FORBIDDEN" });
   }
   return next({ ctx });
 });
 
-const requireManager = requireSession.unstable_pipe(({ ctx, next }) => {
-  if (ctx.role !== "MANAGER") {
+const requireAdmin = requireSession.unstable_pipe(({ ctx, next }) => {
+  if (ctx.role !== "ADMIN") {
     throw new TRPCError({ code: "FORBIDDEN" });
   }
   return next({ ctx });
 });
 
 export const protectedProcedure = t.procedure.use(requireSession);
+export const commercialManagerProcedure = t.procedure.use(requireCommercialManager);
 export const adminProcedure = t.procedure.use(requireAdmin);
-export const managerProcedure = t.procedure.use(requireManager);

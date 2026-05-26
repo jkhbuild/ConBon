@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 import type { Role } from "@prisma/client";
 
 // Tab nav rendered at the top of every /admin/* page. People + Contracts
-// are visible to Admin + Manager; Access (allowlist + role assignment) is
-// Manager-only, mirroring the procedure ladder enforced in tRPC.
-// usePathname keeps the active-tab styling in sync with the URL on
+// are visible to Admin + Commercial Manager; Access (allowlist + role
+// assignment) is Admin-only, mirroring the procedure ladder enforced in
+// tRPC. usePathname keeps the active-tab styling in sync with the URL on
 // client-side navigation without a full reload.
 
 type AdminTabsProps = {
@@ -21,7 +21,7 @@ export function AdminTabs({ role }: AdminTabsProps) {
     { href: "/admin/people", label: "People" },
     { href: "/admin/contracts", label: "Contracts" },
   ];
-  if (role === "MANAGER") {
+  if (role === "ADMIN") {
     tabs.push({ href: "/admin/access", label: "Access" });
   }
 

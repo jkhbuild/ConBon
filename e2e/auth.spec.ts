@@ -8,7 +8,7 @@ import { test, expect } from "@playwright/test";
 //  - /active redirects to /signin when not authenticated
 //  - dev-bypass button is visible (proves AUTH_DEV_USER_EMAIL + non-prod)
 //  - clicking the button signs in and lands on /active
-//  - the header shows the viewer's Manager role + a Sign out button
+//  - the header shows the viewer's Admin role + a Sign out button
 //
 // Production / Google flow is intentionally out of scope — that path
 // requires real OAuth credentials and a configured redirect URI.
@@ -22,7 +22,7 @@ test.describe("auth", () => {
     await expect(page.getByRole("heading", { name: "ConBon" })).toBeVisible();
   });
 
-  test("dev-bypass sign-in lands on /active as Manager", async ({ page }) => {
+  test("dev-bypass sign-in lands on /active as Admin", async ({ page }) => {
     await page.goto("/signin?callbackUrl=%2Factive");
 
     const devBypassBtn = page.getByRole("button", { name: /dev bypass/i });
@@ -36,7 +36,7 @@ test.describe("auth", () => {
 
     // Header shell renders the role pill + sign-out button when authenticated.
     await expect(page.getByRole("button", { name: /sign out/i })).toBeVisible();
-    // The bootstrap user is seeded as MANAGER via BOOTSTRAP_MANAGER_EMAIL.
-    await expect(page.getByText(/^manager$/i).first()).toBeVisible();
+    // The bootstrap user is seeded as ADMIN via BOOTSTRAP_MANAGER_EMAIL.
+    await expect(page.getByText(/^admin$/i).first()).toBeVisible();
   });
 });

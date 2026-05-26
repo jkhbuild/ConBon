@@ -15,8 +15,8 @@ import { router, protectedProcedure } from "@/lib/trpc/trpc";
 //
 // `protectedProcedure` throughout — every user manages their own prefs.
 // There's no admin-edits-someone-else's-prefs flow, so the procedure
-// ladder doesn't need ADMIN/MANAGER tiers here; ctx.userId is the only
-// id we accept.
+// ladder doesn't need ADMIN / COMMERCIAL_MANAGER tiers here; ctx.userId
+// is the only id we accept.
 
 // Valid theme + layout values. Strings (not Prisma enums) at the schema
 // layer because theme is expected to grow (bold-noir, bold-forest, etc.)

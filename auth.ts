@@ -4,7 +4,7 @@ import Credentials from "next-auth/providers/credentials";
 import type { Provider } from "next-auth/providers";
 import { db } from "@/lib/db";
 import { PALETTE_DEFAULT_HEX } from "@/lib/palette";
-import type { Role } from "@prisma/client";
+import { Role } from "@prisma/client";
 
 // Phase 7 auth config.
 //
@@ -81,7 +81,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
 
     async jwt({ token, trigger }) {
-      if (!token.userId || trigger === "signIn" || trigger === "signUp") {
+      // Refresh from DB on first sign-in, OR if the JWT carries a role value
+      // that's no longer a member of the Role enum. The latter handles
+      // session survival across role-rename migrations: a JWT minted before
+      // the rename keeps its old role string, and without the staleness
+      // check the user is silently downgraded (every requireAdmin guard
+      // throws FORBIDDEN) until they sign back in.
+      const tokenRoleIsStale =
+        typeof token.role === "string" &&
+        !Object.values(Role).includes(token.role as Role);
+      if (
+        !token.userId ||
+        trigger === "signIn" ||
+        trigger === "signUp" ||
+        tokenRoleIsStale
+      ) {
         const email = token.email?.toLowerCase();
         if (email) {
           const person = await db.person.findUnique({

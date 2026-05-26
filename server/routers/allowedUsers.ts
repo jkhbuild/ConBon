@@ -1,14 +1,14 @@
 import { z } from "zod";
 import { Role } from "@prisma/client";
-import { router, managerProcedure } from "@/lib/trpc/trpc";
+import { router, adminProcedure } from "@/lib/trpc/trpc";
 import { writeAudit } from "@/lib/audit";
 
 // AllowedUser router — gates who can sign in via the NextAuth signIn
 // callback (auth.ts checks AllowedUser.email).
 //
-// All procedures are `managerProcedure`. Per the role table: Admin tier
-// can edit People + Contracts but NOT the allowlist; only Manager decides
-// who is allowed to sign in (the access-control surface itself).
+// All procedures are `adminProcedure`. Per the role table: Commercial
+// Manager can edit People + Contracts but NOT the allowlist; only Admin
+// decides who is allowed to sign in (the access-control surface itself).
 //
 // `remove` only deletes the AllowedUser row — it does NOT deactivate the
 // matching Person or invalidate live sessions. A removed user's existing
@@ -40,7 +40,7 @@ const addInput = z.object({
 const removeInput = z.object({ id: cuidSchema });
 
 export const allowedUsersRouter = router({
-  list: managerProcedure.query(async ({ ctx }) => {
+  list: adminProcedure.query(async ({ ctx }) => {
     return ctx.db.allowedUser.findMany({
       include: {
         addedBy: { select: { id: true, name: true, email: true } },
@@ -49,7 +49,7 @@ export const allowedUsersRouter = router({
     });
   }),
 
-  add: managerProcedure.input(addInput).mutation(async ({ ctx, input }) => {
+  add: adminProcedure.input(addInput).mutation(async ({ ctx, input }) => {
     return ctx.db.$transaction(async (tx) => {
       const created = await tx.allowedUser.create({
         data: {
@@ -70,7 +70,7 @@ export const allowedUsersRouter = router({
     });
   }),
 
-  remove: managerProcedure.input(removeInput).mutation(async ({ ctx, input }) => {
+  remove: adminProcedure.input(removeInput).mutation(async ({ ctx, input }) => {
     return ctx.db.$transaction(async (tx) => {
       const before = await tx.allowedUser.findUniqueOrThrow({ where: { id: input.id } });
       const deleted = await tx.allowedUser.delete({ where: { id: input.id } });

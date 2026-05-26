@@ -1302,6 +1302,18 @@ input, select, textarea {
 .btn-row:hover { color: var(--ink); border-color: var(--line-strong); }
 .btn-row.is-danger { color: var(--p5); }
 .btn-row.is-danger:hover { color: var(--p5); border-color: var(--p5); }
+.btn-row.btn-row-icon {
+  width: 28px;
+  padding: 4px 0;
+  font-size: 14px;
+  line-height: 1;
+  text-align: center;
+}
+.btn-row[disabled],
+.btn-row[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
 /* Avatar utility — small disc with initials. Used by People admin rows
    and (later phases) anywhere a Person needs a glanceable badge. */
@@ -1342,15 +1354,17 @@ input, select, textarea {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
   color: var(--ink-2);
 }
-.role-pill.is-manager .role-pill-tag {
+.role-pill.is-admin .role-pill-tag {
   background: color-mix(in srgb, var(--p5) 22%, transparent);
   color: var(--ink);
 }
-.role-pill.is-admin .role-pill-tag {
+.role-pill.is-commercial-manager .role-pill-tag {
   background: color-mix(in srgb, var(--p3) 28%, transparent);
   color: var(--ink);
 }
-.role-pill.is-employee .role-pill-tag {
+.role-pill.is-analyst .role-pill-tag,
+.role-pill.is-estimator .role-pill-tag,
+.role-pill.is-scheduler .role-pill-tag {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
   color: var(--ink-2);
 }

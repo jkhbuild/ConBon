@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { Role } from "@prisma/client";
-import { router, protectedProcedure, adminProcedure } from "@/lib/trpc/trpc";
+import { router, protectedProcedure, commercialManagerProcedure } from "@/lib/trpc/trpc";
 import { isPaletteHex, PALETTE_DEFAULT_HEX } from "@/lib/palette";
 import { writeAudit } from "@/lib/audit";
 
@@ -11,7 +11,7 @@ import { writeAudit } from "@/lib/audit";
 // render in name order. `listAll` (Phase 9) includes inactives, active
 // first then name, so the Admin UI can show + reactivate them.
 //
-// Mutations (Phase 9) are all `adminProcedure` — both Admin and Manager
+// Mutations are `commercialManagerProcedure` — Admin and Commercial Manager
 // can edit People. Color is constrained to the shared palette; the default
 // gray (#888888) stamped by the auth signIn callback is also accepted so
 // freshly-onboarded users with no admin-assigned swatch can be updated
@@ -66,17 +66,20 @@ export const peopleRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
     return ctx.db.person.findMany({
       where: { active: true },
-      orderBy: { name: "asc" },
+      // Position is the admin-controlled board column order; name is the
+      // tie-breaker for rows that haven't been reordered yet (or two rows
+      // that ended up with the same legacy 0 default).
+      orderBy: [{ position: "asc" }, { name: "asc" }],
     });
   }),
 
-  listAll: adminProcedure.query(async ({ ctx }) => {
+  listAll: commercialManagerProcedure.query(async ({ ctx }) => {
     return ctx.db.person.findMany({
-      orderBy: [{ active: "desc" }, { name: "asc" }],
+      orderBy: [{ active: "desc" }, { position: "asc" }, { name: "asc" }],
     });
   }),
 
-  create: adminProcedure.input(peopleCreateInput).mutation(async ({ ctx, input }) => {
+  create: commercialManagerProcedure.input(peopleCreateInput).mutation(async ({ ctx, input }) => {
     return ctx.db.$transaction(async (tx) => {
       const created = await tx.person.create({
         data: {
@@ -98,16 +101,16 @@ export const peopleRouter = router({
     });
   }),
 
-  update: adminProcedure.input(peopleUpdateInput).mutation(async ({ ctx, input }) => {
+  update: commercialManagerProcedure.input(peopleUpdateInput).mutation(async ({ ctx, input }) => {
     const { id, ...patch } = input;
-    // Role promote/demote is Manager-only — Admin can edit name / email /
-    // color but not change someone's tier. The Phase 9 People admin UI
-    // hides the role select from Admin viewers, but enforce here too so
-    // a hand-crafted request can't sneak through.
-    if (patch.role !== undefined && ctx.role !== "MANAGER") {
+    // Role promote/demote is Admin-only — Commercial Manager can edit name /
+    // email / color but not change someone's tier. The People admin UI
+    // hides the role select from non-Admin viewers, but enforce here too
+    // so a hand-crafted request can't sneak through.
+    if (patch.role !== undefined && ctx.role !== "ADMIN") {
       throw new TRPCError({
         code: "FORBIDDEN",
-        message: "Only Manager can change roles",
+        message: "Only Admin can change roles",
       });
     }
     return ctx.db.$transaction(async (tx) => {
@@ -125,7 +128,7 @@ export const peopleRouter = router({
     });
   }),
 
-  deactivate: adminProcedure.input(idInput).mutation(async ({ ctx, input }) => {
+  deactivate: commercialManagerProcedure.input(idInput).mutation(async ({ ctx, input }) => {
     return ctx.db.$transaction(async (tx) => {
       const before = await tx.person.findUniqueOrThrow({ where: { id: input.id } });
       // Snapshot the cards that are about to be reassigned so we can emit
@@ -168,7 +171,7 @@ export const peopleRouter = router({
     });
   }),
 
-  reactivate: adminProcedure.input(idInput).mutation(async ({ ctx, input }) => {
+  reactivate: commercialManagerProcedure.input(idInput).mutation(async ({ ctx, input }) => {
     return ctx.db.$transaction(async (tx) => {
       const before = await tx.person.findUniqueOrThrow({ where: { id: input.id } });
       const after = await tx.person.update({
@@ -186,4 +189,51 @@ export const peopleRouter = router({
       return after;
     });
   }),
+
+  // Swap this person's position with their neighbor in the same active
+  // bucket (active rows reorder among active rows; inactive among inactive).
+  // Neighbor swap keeps the integers sequential without rebalance and means
+  // a click of ↑ on row N just exchanges N's position with N-1's. Both
+  // Person rows fire NOTIFY → SSE invalidation, so the Board re-fetches
+  // people.list and re-renders columns in the new order.
+  reorder: commercialManagerProcedure
+    .input(z.object({ id: cuidSchema, direction: z.enum(["up", "down"]) }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.db.$transaction(async (tx) => {
+        const self = await tx.person.findUniqueOrThrow({ where: { id: input.id } });
+        const neighbor = await tx.person.findFirst({
+          where: {
+            active: self.active,
+            id: { not: self.id },
+            position: input.direction === "up"
+              ? { lt: self.position }
+              : { gt: self.position },
+          },
+          orderBy: { position: input.direction === "up" ? "desc" : "asc" },
+        });
+        if (!neighbor) {
+          // Already at the end of the list — no-op, but return self so the
+          // optimistic UI doesn't have to special-case the boundary.
+          return { self, neighbor: null };
+        }
+        // Swap positions. Two-step via a sentinel to dodge the (position)
+        // unique-index trap if one ever gets added; safe even without it.
+        const tempPosition = -Math.abs(self.position) - 1_000_000;
+        await tx.person.update({ where: { id: self.id }, data: { position: tempPosition } });
+        await tx.person.update({ where: { id: neighbor.id }, data: { position: self.position } });
+        const updatedSelf = await tx.person.update({
+          where: { id: self.id },
+          data: { position: neighbor.position },
+        });
+        await writeAudit(tx, {
+          actorId: ctx.userId,
+          entityType: "Person",
+          entityId: self.id,
+          action: "update",
+          before: self,
+          after: updatedSelf,
+        });
+        return { self: updatedSelf, neighbor };
+      });
+    }),
 });

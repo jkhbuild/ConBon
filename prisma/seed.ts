@@ -38,11 +38,15 @@ function addDays(base: Date, n: number): Date {
 // Colors reference the shared PALETTE so the Admin color picker and the
 // seed share one source of truth — the first four palette entries are
 // the prototype's seeded colors in order.
+//
+// Roles spread across the three tiers so the dev board exercises each
+// permission path: one Admin (top), one Commercial Manager (mid), and
+// one of each bottom-tier job label.
 const PEOPLE = [
-  { slug: "justin", name: "Justin Park", color: PALETTE[0].hex },
-  { slug: "swati", name: "Swati Iyer", color: PALETTE[1].hex },
-  { slug: "michael", name: "Michael Brennan", color: PALETTE[2].hex },
-  { slug: "francisco", name: "Francisco Aguilar", color: PALETTE[3].hex },
+  { slug: "justin", name: "Justin Park", color: PALETTE[0].hex, role: "ADMIN" as const },
+  { slug: "swati", name: "Swati Iyer", color: PALETTE[1].hex, role: "COMMERCIAL_MANAGER" as const },
+  { slug: "michael", name: "Michael Brennan", color: PALETTE[2].hex, role: "ESTIMATOR" as const },
+  { slug: "francisco", name: "Francisco Aguilar", color: PALETTE[3].hex, role: "SCHEDULER" as const },
 ] as const;
 
 type PersonSlug = (typeof PEOPLE)[number]["slug"];
@@ -114,10 +118,13 @@ async function main() {
   await db.person.deleteMany();
 
   console.log("→ Seeding people…");
+  // Position pre-set per PEOPLE array order so the dev board column order
+  // matches reference/prototype/data.jsx.
   const personIdBySlug = new Map<PersonSlug, string>();
-  for (const p of PEOPLE) {
+  for (let idx = 0; idx < PEOPLE.length; idx++) {
+    const p = PEOPLE[idx]!;
     const created = await db.person.create({
-      data: { name: p.name, color: p.color, role: "EMPLOYEE" },
+      data: { name: p.name, color: p.color, role: p.role, position: idx + 1 },
     });
     personIdBySlug.set(p.slug, created.id);
   }
