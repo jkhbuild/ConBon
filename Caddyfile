@@ -13,6 +13,17 @@
 	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
 }
 
+# www → apex 301. Mobile browsers (especially iOS Safari + Chrome on
+# Android) sometimes auto-prepend `www`; without this redirect the
+# request lands on whatever the wildcard DNS catches (was Vercel's
+# default landing, which served "Deployment not found"). One canonical
+# URL — the apex — keeps both browsers and search engines happy. Caddy
+# auto-provisions a Let's Encrypt cert for www.{$DOMAIN} as soon as
+# DNS resolves it to this server.
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}
+
 {$DOMAIN} {
 	header {
 		# 1y HSTS — only crank up once the deploy is stable. Add `preload`
