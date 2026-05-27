@@ -24,6 +24,7 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { trpc } from "@/lib/trpc/client";
 import type { RouterOutputs } from "@/lib/trpc/types";
+import { BoardClockContext } from "./BoardClock";
 import { Card, type CardData } from "./Card";
 import { CardEditModal } from "./CardEditModal";
 import { Column } from "./Column";
@@ -33,6 +34,11 @@ import { effectivePriority } from "@/lib/priority";
 import { useOptimisticListMutation } from "@/lib/hooks/useOptimisticListMutation";
 import { useUIStore } from "@/stores/uiStore";
 import { useBoardLayout } from "@/components/shell/PreferencesProvider";
+
+// Tick the shared clock every minute on the client. Aging math has
+// day-level granularity, so a 60-second cadence is plenty — anything
+// finer would just churn re-renders.
+const CLOCK_TICK_MS = 60_000;
 
 // Board — Phase 6: live mutations via tRPC + optimistic cache updates.
 // The local-useState mirror from Phase 5 is gone; the React Query cache
@@ -56,6 +62,11 @@ type PersonData = RouterOutputs["people"]["list"][number];
 type BoardProps = {
   initialCards: CardData[];
   people: PersonData[];
+  // Server-resolved timestamp (Date.now() at RSC render). Seeds the
+  // BoardClock so SSR and the client's first hydration render agree on
+  // the same instant — eliminates the priority/aging text drift that
+  // otherwise fires React #418. See components/board/BoardClock.tsx.
+  serverNow: number;
 };
 
 type MoveInput = {
@@ -64,7 +75,7 @@ type MoveInput = {
   toPosition: number;
 };
 
-export function Board({ initialCards, people }: BoardProps) {
+export function Board({ initialCards, people, serverNow }: BoardProps) {
   const utils = trpc.useUtils();
   const { data: cards = initialCards } = trpc.cards.list.useQuery(undefined, {
     initialData: initialCards,
@@ -74,6 +85,19 @@ export function Board({ initialCards, people }: BoardProps) {
   const setDraggingCardId = useUIStore((s) => s.setDraggingCardId);
   const draggingCardId = useUIStore((s) => s.draggingCardId);
   const [, startTransition] = useTransition();
+
+  // Shared "now" for all time-sensitive board renders. Initialized from
+  // the server-provided timestamp so the SSR HTML and the client's first
+  // render agree byte-for-byte. A mount effect immediately rebases to
+  // the real client clock (one harmless post-hydration re-render) and
+  // ticks once a minute thereafter so aging math stays current without
+  // a reload.
+  const [now, setNow] = useState<Date>(() => new Date(serverNow));
+  useEffect(() => {
+    setNow(new Date());
+    const id = setInterval(() => setNow(new Date()), CLOCK_TICK_MS);
+    return () => clearInterval(id);
+  }, []);
 
   // Live-region message for SR users. Updated on drag start / end. The
   // node is wrapped in a stable container with aria-live=polite so
@@ -147,7 +171,6 @@ export function Board({ initialCards, people }: BoardProps) {
     const map = new Map<string, CardData[]>();
     map.set(BACKLOG_KEY, []);
     for (const p of people) map.set(p.id, []);
-    const now = new Date();
     for (const c of cards) {
       const key = c.assigneeId ?? BACKLOG_KEY;
       let bucket = map.get(key);
@@ -169,7 +192,7 @@ export function Board({ initialCards, people }: BoardProps) {
       });
     }
     return map;
-  }, [cards, people]);
+  }, [cards, people, now]);
 
   // Look up the dragged card for the DragOverlay. Ref the latest cards
   // so drag-end callbacks see post-mutation cache state.
@@ -293,55 +316,57 @@ export function Board({ initialCards, people }: BoardProps) {
 
   return (
     <div className="board-wrap">
-      <DndContext
-        // Stable id so the auto-generated `aria-describedby` for SR
-        // announcements matches between SSR and client hydration.
-        // @dnd-kit otherwise increments a global counter that differs
-        // depending on render order.
-        id="conbon-board"
-        sensors={sensors}
-        collisionDetection={collisionDetectionStrategy}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onDragCancel={handleDragCancel}
-      >
-        {layout === "swimlanes" ? (
-          <SwimLanesLayout groups={groups} people={people} />
-        ) : (
-          <ColumnsLayout groups={groups} people={people} />
-        )}
-        <DragOverlay>
-          {draggingCard ? (
-            <Card card={draggingCard} isOverlay>
-              <Card.Top />
-              <Card.Title />
-              <Card.Blocker />
-              <Card.Footer />
-              <Card.Aging />
-            </Card>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+      <BoardClockContext.Provider value={now}>
+        <DndContext
+          // Stable id so the auto-generated `aria-describedby` for SR
+          // announcements matches between SSR and client hydration.
+          // @dnd-kit otherwise increments a global counter that differs
+          // depending on render order.
+          id="conbon-board"
+          sensors={sensors}
+          collisionDetection={collisionDetectionStrategy}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          {layout === "swimlanes" ? (
+            <SwimLanesLayout groups={groups} people={people} />
+          ) : (
+            <ColumnsLayout groups={groups} people={people} />
+          )}
+          <DragOverlay>
+            {draggingCard ? (
+              <Card card={draggingCard} isOverlay>
+                <Card.Top />
+                <Card.Title />
+                <Card.Blocker />
+                <Card.Footer />
+                <Card.Aging />
+              </Card>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
 
-      <div
-        aria-live="polite"
-        aria-atomic="true"
-        style={{
-          position: "absolute",
-          width: 1,
-          height: 1,
-          padding: 0,
-          margin: -1,
-          overflow: "hidden",
-          clip: "rect(0, 0, 0, 0)",
-          whiteSpace: "nowrap",
-          border: 0,
-        }}
-      >
-        {announcement}
-      </div>
+        <div
+          aria-live="polite"
+          aria-atomic="true"
+          style={{
+            position: "absolute",
+            width: 1,
+            height: 1,
+            padding: 0,
+            margin: -1,
+            overflow: "hidden",
+            clip: "rect(0, 0, 0, 0)",
+            whiteSpace: "nowrap",
+            border: 0,
+          }}
+        >
+          {announcement}
+        </div>
 
-      <CardEditModal />
+        <CardEditModal />
+      </BoardClockContext.Provider>
     </div>
   );
 }

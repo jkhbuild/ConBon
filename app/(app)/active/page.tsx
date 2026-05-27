@@ -19,5 +19,11 @@ export default async function ActivePage() {
     trpc.people.list(),
   ]);
 
-  return <Board initialCards={cards} people={people} />;
+  // Pin the clock at the RSC layer so SSR + client-hydration use the same
+  // "now" for the priority/aging math. Date.now() is fine over Date —
+  // BoardClockContext stores Date and the client constructs it from this
+  // number on initial state.
+  return (
+    <Board initialCards={cards} people={people} serverNow={Date.now()} />
+  );
 }

@@ -8,6 +8,7 @@ import {
 import { Card, type CardData } from "./Card";
 import { CardContextMenu } from "./CardContextMenu";
 import { NewCardButton } from "./NewCardButton";
+import { useBoardClock } from "./BoardClock";
 import { effectivePriority } from "@/lib/priority";
 
 // SwimLane — Layout B: horizontal strip per assignee, cards laid out in
@@ -41,7 +42,10 @@ export function SwimLane({
   const { isOver, setNodeRef } = useDroppable({ id: columnId });
   const cardIds = cards.map((c) => c.id);
 
-  const now = new Date();
+  // Shared clock from <Board>'s BoardClock context — keeps SSR and
+  // hydration in agreement on these `{urgentCount}` / `{overdueCount}`
+  // text nodes. Re-renders once a minute as the clock ticks.
+  const now = useBoardClock();
   const overdueCount = cards.filter((c) => c.dueDate.getTime() < now.getTime()).length;
   const urgentCount = cards.filter((c) => effectivePriority(c, now) >= 4).length;
 
