@@ -58,10 +58,23 @@ const CLOCK_TICK_MS = 60_000;
 const BACKLOG_KEY = "__backlog";
 
 type PersonData = RouterOutputs["people"]["list"][number];
+export type BlockerData = RouterOutputs["blockers"]["list"][number];
+
+export type ViewerInfo = {
+  id: string;
+  role: PersonData["role"];
+};
 
 type BoardProps = {
   initialCards: CardData[];
   people: PersonData[];
+  // Post-v1 blockers feature: the full open-blocker list, fanned out
+  // into the column of every COMMERCIAL_MANAGER Person below.
+  initialBlockers: BlockerData[];
+  // Viewer's id + role used by BlockerContextMenu to gate the
+  // acknowledge / clear actions. Null only on a brief race between
+  // sign-out and unmount; the menus render no actions in that case.
+  viewer: ViewerInfo | null;
   // Server-resolved timestamp (Date.now() at RSC render). Seeds the
   // BoardClock so SSR and the client's first hydration render agree on
   // the same instant — eliminates the priority/aging text drift that
@@ -75,11 +88,21 @@ type MoveInput = {
   toPosition: number;
 };
 
-export function Board({ initialCards, people, serverNow }: BoardProps) {
+export function Board({
+  initialCards,
+  people,
+  initialBlockers,
+  viewer,
+  serverNow,
+}: BoardProps) {
   const utils = trpc.useUtils();
   const { data: cards = initialCards } = trpc.cards.list.useQuery(undefined, {
     initialData: initialCards,
   });
+  const { data: blockers = initialBlockers } = trpc.blockers.list.useQuery(
+    undefined,
+    { initialData: initialBlockers },
+  );
 
   const layout = useBoardLayout();
   const setDraggingCardId = useUIStore((s) => s.setDraggingCardId);
@@ -193,6 +216,20 @@ export function Board({ initialCards, people, serverNow }: BoardProps) {
     }
     return map;
   }, [cards, people, now]);
+
+  // Fan blockers out into the column of every Commercial Manager person
+  // (a blocker isn't "assigned" — it's a notice every CM should see in
+  // their column, sorted by raise time). Bottom-tier non-CM columns get
+  // an empty list. The Map's value is the same array reference so we
+  // don't pay N copies of the blocker list for N CMs.
+  const blockersByPerson = useMemo(() => {
+    const map = new Map<string, BlockerData[]>();
+    const cmIds = people
+      .filter((p) => p.role === "COMMERCIAL_MANAGER")
+      .map((p) => p.id);
+    for (const id of cmIds) map.set(id, blockers);
+    return map;
+  }, [blockers, people]);
 
   // Look up the dragged card for the DragOverlay. Ref the latest cards
   // so drag-end callbacks see post-mutation cache state.
@@ -330,9 +367,19 @@ export function Board({ initialCards, people, serverNow }: BoardProps) {
           onDragCancel={handleDragCancel}
         >
           {layout === "swimlanes" ? (
-            <SwimLanesLayout groups={groups} people={people} />
+            <SwimLanesLayout
+              groups={groups}
+              people={people}
+              blockersByPerson={blockersByPerson}
+              viewer={viewer}
+            />
           ) : (
-            <ColumnsLayout groups={groups} people={people} />
+            <ColumnsLayout
+              groups={groups}
+              people={people}
+              blockersByPerson={blockersByPerson}
+              viewer={viewer}
+            />
           )}
           <DragOverlay>
             {draggingCard ? (
@@ -374,9 +421,11 @@ export function Board({ initialCards, people, serverNow }: BoardProps) {
 type LayoutProps = {
   groups: Map<string, CardData[]>;
   people: PersonData[];
+  blockersByPerson: Map<string, BlockerData[]>;
+  viewer: ViewerInfo | null;
 };
 
-function ColumnsLayout({ groups, people }: LayoutProps) {
+function ColumnsLayout({ groups, people, blockersByPerson, viewer }: LayoutProps) {
   const backlogCards = groups.get(BACKLOG_KEY) ?? [];
   return (
     <div
@@ -391,6 +440,8 @@ function ColumnsLayout({ groups, people }: LayoutProps) {
         avatarColor="var(--ink-2)"
         avatarText="BL"
         cards={backlogCards}
+        blockers={[]}
+        viewer={viewer}
       />
       {people.map((p) => (
         <Column
@@ -402,13 +453,15 @@ function ColumnsLayout({ groups, people }: LayoutProps) {
           avatarColor={p.color}
           avatarText={initialsOf(p.name)}
           cards={groups.get(p.id) ?? []}
+          blockers={blockersByPerson.get(p.id) ?? []}
+          viewer={viewer}
         />
       ))}
     </div>
   );
 }
 
-function SwimLanesLayout({ groups, people }: LayoutProps) {
+function SwimLanesLayout({ groups, people, blockersByPerson, viewer }: LayoutProps) {
   const backlogCards = groups.get(BACKLOG_KEY) ?? [];
   return (
     <div className="board-lanes">
@@ -420,6 +473,8 @@ function SwimLanesLayout({ groups, people }: LayoutProps) {
         avatarColor="var(--ink-2)"
         avatarText="BL"
         cards={backlogCards}
+        blockers={[]}
+        viewer={viewer}
         isBacklog
       />
       {people.map((p) => (
@@ -432,6 +487,8 @@ function SwimLanesLayout({ groups, people }: LayoutProps) {
           avatarColor={p.color}
           avatarText={initialsOf(p.name)}
           cards={groups.get(p.id) ?? []}
+          blockers={blockersByPerson.get(p.id) ?? []}
+          viewer={viewer}
         />
       ))}
     </div>

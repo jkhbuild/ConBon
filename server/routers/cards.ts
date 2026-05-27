@@ -140,6 +140,19 @@ export const cardsRouter = router({
         data: patch,
         include: CARD_INCLUDE,
       });
+      // Keep the Blocker sidecar in lockstep with blockerNote. The sidecar
+      // exists exactly when blockerNote is non-null; text-only edits while
+      // it's still non-null leave the row (and its raiser + raisedAt + any
+      // CM acknowledgement) untouched.
+      const noteWasSet = before.blockerNote != null;
+      const noteIsSet = after.blockerNote != null;
+      if (!noteWasSet && noteIsSet) {
+        await tx.blocker.create({
+          data: { cardId: id, raisedById: ctx.userId },
+        });
+      } else if (noteWasSet && !noteIsSet) {
+        await tx.blocker.delete({ where: { cardId: id } });
+      }
       await writeAudit(tx, {
         actorId: ctx.userId,
         entityType: "Card",
@@ -182,6 +195,13 @@ export const cardsRouter = router({
         },
         include: CARD_INCLUDE,
       });
+      // If the create included a blocker note, materialize the sidecar in
+      // the same tx so the CM column picks it up on the next SSE tick.
+      if (created.blockerNote != null) {
+        await tx.blocker.create({
+          data: { cardId: created.id, raisedById: ctx.userId },
+        });
+      }
       await writeAudit(tx, {
         actorId: ctx.userId,
         entityType: "Card",
@@ -209,6 +229,10 @@ export const cardsRouter = router({
         data: { archivedAt: new Date() },
         include: CARD_INCLUDE,
       });
+      // Stale blockers shouldn't keep firing in the CM column once the
+      // underlying card is archived. deleteMany is a safe no-op if no
+      // sidecar exists (most archives — only blocked cards have one).
+      await tx.blocker.deleteMany({ where: { cardId: input.id } });
       await writeAudit(tx, {
         actorId: ctx.userId,
         entityType: "Card",

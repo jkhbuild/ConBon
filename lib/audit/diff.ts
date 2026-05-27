@@ -171,11 +171,19 @@ const ALLOWED_USER_FIELDS: FieldConfig[] = [
   { key: "role", label: "Role", format: fmtRole },
 ];
 
+// Blocker audit shape: we only render the acknowledge / unacknowledge
+// transition (the raise / clear states live on the Card via cards.update's
+// audit row). acknowledgedAt is a Date|null, formatted via fmtDate.
+const BLOCKER_FIELDS: FieldConfig[] = [
+  { key: "acknowledgedAt", label: "Acknowledged at", format: fmtDate },
+];
+
 const FIELDS_BY_ENTITY: Record<AuditEntityType, FieldConfig[]> = {
   Card: CARD_FIELDS,
   Person: PERSON_FIELDS,
   Contract: CONTRACT_FIELDS,
   AllowedUser: ALLOWED_USER_FIELDS,
+  Blocker: BLOCKER_FIELDS,
 };
 
 // ----- public API --------------------------------------------------------
@@ -226,6 +234,8 @@ function entityLabel(event: AuditEventRow): string {
       return (rec.code as string) ?? "contract";
     case "AllowedUser":
       return (rec.email as string) ?? "allowlist entry";
+    case "Blocker":
+      return "a blocker";
   }
 }
 

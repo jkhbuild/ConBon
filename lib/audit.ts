@@ -19,7 +19,7 @@ import { Prisma } from "@prisma/client";
 // benefit is correctness under partial failure, which matters because the
 // audit log is the only after-the-fact record of who changed what.
 
-export const AUDITED_ENTITY_TYPES = ["Card", "Person", "Contract", "AllowedUser"] as const;
+export const AUDITED_ENTITY_TYPES = ["Card", "Person", "Contract", "AllowedUser", "Blocker"] as const;
 export type AuditEntityType = (typeof AUDITED_ENTITY_TYPES)[number];
 
 export const AUDIT_ACTIONS = [

@@ -68,10 +68,19 @@ model Person {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  assignedCards Card[]          @relation("CardAssignee")
-  allowlistedBy AllowedUser[]   @relation("AllowedUserAddedBy")
-  preference    UserPreference?
-  auditEvents   AuditLog[]      @relation("AuditLogActor")
+  assignedCards     Card[]          @relation("CardAssignee")
+  allowlistedBy     AllowedUser[]   @relation("AllowedUserAddedBy")
+  preference        UserPreference?
+  auditEvents       AuditLog[]      @relation("AuditLogActor")
+  // Back-refs for the Blocker sidecar (post-v1).
+  // A Person can raise many blockers (one per Card they edit), and can
+  // also be the Commercial Manager / Admin who acknowledges others'.
+  // RaisedBy is Restrict (don't lose audit trail on Person delete), but
+  // raisers can't be soft-deactivated without first clearing their open
+  // blockers in practice — at the 4-8 user scale this hasn't been a
+  // forcing function for soft-delete plumbing.
+  blockersRaised      Blocker[] @relation("BlockerRaisedBy")
+  blockersAcknowledged Blocker[] @relation("BlockerAcknowledgedBy")
 
   @@index([active])
   @@index([position])
@@ -108,6 +117,12 @@ model Card {
   assignee   Person?  @relation("CardAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   contractId String
   contract   Contract @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  // Optional 1:1 sidecar: a Blocker row exists exactly when blockerNote
+  // is non-null, kept in sync inside the cards.update $transaction
+  // (post-v1). Cascade on delete so a future hard-delete of a Card also
+  // tears down its Blocker; archive paths null blockerNote first and
+  // delete the sidecar explicitly so the cascade is belt-and-suspenders.
+  blocker    Blocker?
   // NOTE: the partial index `(assigneeId, position) WHERE archivedAt IS NULL`
   // — the primary board-fetch index — is created via raw SQL in the
   // init migration. Prisma's @@index can't express WHERE clauses.
@@ -134,6 +149,32 @@ model UserPreference {
   theme     String   @default("soft") // "soft" | "bold" | "bold-noir" | "bold-forest"
   layout    String   @default("columns") // "columns" | "swimlanes"
   updatedAt DateTime @updatedAt
+}
+
+model Blocker {
+  // Sidecar to Card.blockerNote, 1:1 with Card. Created when blockerNote
+  // transitions null → non-null; hard-deleted on non-null → null (no
+  // archive — the user spec is literal "erased from memory"). The Card's
+  // own audit trail captures the text change; this row carries the
+  // surfacing-to-CM state that has no analogue on Card.
+  //
+  // acknowledgedAt = null  → render in the CM's column as urgent red
+  // acknowledgedAt = set   → render green (CM has triaged it)
+  // acknowledgedById names who flipped the bit so History + toasts can
+  // attribute the action.
+  id               String    @id @default(cuid())
+  cardId           String    @unique
+  raisedById       String
+  raisedAt         DateTime  @default(now())
+  acknowledgedAt   DateTime?
+  acknowledgedById String?
+
+  card           Card    @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  raisedBy       Person  @relation("BlockerRaisedBy", fields: [raisedById], references: [id], onDelete: Restrict)
+  acknowledgedBy Person? @relation("BlockerAcknowledgedBy", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+
+  // Oldest-first sort in the CM column ("assigned first = closer to top").
+  @@index([raisedAt])
 }
 
 model AuditLog {
