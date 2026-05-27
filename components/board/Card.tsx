@@ -22,6 +22,7 @@ import {
   priorityTint,
 } from "@/lib/priority";
 import { useUIStore } from "@/stores/uiStore";
+import { useBoardClock } from "./BoardClock";
 
 // Card — compound component for one task. Composition over boolean props
 // per /vercel-composition-patterns: the root reads the card off context
@@ -61,8 +62,15 @@ type CardRootProps = {
 };
 
 export function Card({ card, children, isOverlay = false }: CardRootProps) {
-  const level = effectivePriority(card);
-  const days = daysBetween(card.assignmentDate, new Date());
+  // Pull "now" off the BoardClock context so every Card in the tree
+  // computes priority + aging against the same instant. Otherwise SSR
+  // and the client's first render see slightly different `new Date()`
+  // values and a card sitting at an integer-day boundary fires React
+  // #418 ("text content didn't match") on its priority chip or aging
+  // row.
+  const now = useBoardClock();
+  const level = effectivePriority(card, now);
+  const days = daysBetween(card.assignmentDate, now);
   const daysLeft = CYCLE_DAYS - days;
 
   const sortable = useSortable({ id: card.id, disabled: isOverlay });
