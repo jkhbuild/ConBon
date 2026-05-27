@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import type { Role } from "@prisma/client";
 import { trpc } from "@/lib/trpc/client";
@@ -101,15 +101,17 @@ export function Header({ viewer }: Props) {
 //   - Admin → /admin/people, gated to viewer.role === "ADMIN" and hidden
 //     on /admin/*. Mirrors the tightened admin/layout.tsx server gate;
 //     deep-linking still bounces non-Admin to the friendly 403 panel.
-//   - Sign out → posts the existing signOutAction (server action that
-//     clears the session and redirects to /signin via next/navigation)
-//
-// Sign out keeps a real <form action=signOutAction> wrapper so the
-// server action retains its React form-action semantics (no need to
-// invoke the action via a client onSelect, which complicates the redirect
-// path through Next 16's router).
+//   - Sign out → awaits the server action (clears the session cookie),
+//     then router.push("/signin") on the client. PR #21 tried doing the
+//     redirect inside the SA via next/navigation's redirect(), but the
+//     Radix DropdownMenu.Item closes its portal synchronously on click
+//     and unmounts the form before React's SA-redirect protocol resolves,
+//     so the redirect was silently dropped in practice. Driving the
+//     navigation from a client onSelect handler decouples it from the
+//     form-mount lifetime.
 function AccountMenu({ viewer }: { viewer: Viewer }) {
   const pathname = usePathname();
+  const router = useRouter();
   const onActive = pathname === "/active";
   const onArchive = pathname === "/archive";
   const onAdmin = pathname.startsWith("/admin");
@@ -155,15 +157,14 @@ function AccountMenu({ viewer }: { viewer: Viewer }) {
             </DropdownMenu.Item>
           )}
           <DropdownMenu.Separator className="account-separator" />
-          <DropdownMenu.Item asChild>
-            <form action={signOutAction}>
-              <button
-                type="submit"
-                className="account-item account-item-danger"
-              >
-                Sign out
-              </button>
-            </form>
+          <DropdownMenu.Item
+            className="account-item account-item-danger"
+            onSelect={async () => {
+              await signOutAction();
+              router.push("/signin");
+            }}
+          >
+            Sign out
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
