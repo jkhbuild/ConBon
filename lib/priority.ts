@@ -59,12 +59,24 @@ export function priorityLabel(level: PriorityLevel): string {
   return LABELS[level - 1];
 }
 
-// "May 18" style — matches the prototype's `formatShort`. The locale
-// is pinned so server-rendered HTML and client hydration produce the
-// same string regardless of the user's browser locale.
+// "May 18" style — matches the prototype's `formatShort`. Both the
+// locale AND the timezone are pinned: locale-only is insufficient
+// because Intl.DateTimeFormat still resolves the wall-clock day from
+// the OS timezone. Server runs in UTC; the user's browser runs in
+// their local TZ. For `@db.Date` columns (assignmentDate, dueDate),
+// Prisma returns UTC-midnight Date objects — without timeZone:"UTC"
+// those format as "May 21" on the server (UTC day) and "May 20" on a
+// client west of UTC (previous local day), and React fires #418
+// ("text content didn't match") on hydration for every visible card.
+// Pinning to UTC fixes both the @db.Date display (the column has no
+// timezone semantics anyway — the date IS the day) and any timestamptz
+// display (slight tradeoff: a late-evening archivedAt may show the
+// UTC day rather than the user's local day, but the deterministic
+// SSR/hydration output is worth the consistency at the 4-8 user scale).
 const SHORT_FMT = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
+  timeZone: "UTC",
 });
 export function formatShort(d: Date): string {
   return SHORT_FMT.format(d);
