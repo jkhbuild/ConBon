@@ -5,6 +5,7 @@ import { contractsRouter } from "./contracts";
 import { allowedUsersRouter } from "./allowedUsers";
 import { auditRouter } from "./audit";
 import { prefsRouter } from "./prefs";
+import { blockersRouter } from "./blockers";
 
 // Root tRPC router. Each phase adds new sub-routers off this one:
 //   Phase 3: cards.list, people.list, contracts.list                (read-only)
@@ -23,6 +24,7 @@ export const appRouter = router({
   allowedUsers: allowedUsersRouter,
   audit: auditRouter,
   prefs: prefsRouter,
+  blockers: blockersRouter,
 });
 
 export type AppRouter = typeof appRouter;

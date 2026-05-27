@@ -8,6 +8,8 @@ import {
 import { Card, type CardData } from "./Card";
 import { CardContextMenu } from "./CardContextMenu";
 import { NewCardButton } from "./NewCardButton";
+import { BlockerCard } from "./BlockerCard";
+import type { BlockerData, ViewerInfo } from "./Board";
 import { useBoardClock } from "./BoardClock";
 import { effectivePriority } from "@/lib/priority";
 
@@ -15,6 +17,10 @@ import { effectivePriority } from "@/lib/priority";
 // a responsive grid inside. Same drop semantics as Column but the
 // SortableContext uses rectSortingStrategy because the children flow
 // 2-dimensionally.
+//
+// Post-v1: blockers render after the regular cards inside .lane-body,
+// outside the SortableContext's participation (no useSortable). They
+// flow as additional grid items.
 
 type SwimLaneProps = {
   columnId: string;
@@ -25,6 +31,8 @@ type SwimLaneProps = {
   avatarColor: string;
   avatarText: string;
   cards: CardData[];
+  blockers: BlockerData[];
+  viewer: ViewerInfo | null;
   // Backlog lane skips urgent/overdue stats and shows a hint instead.
   isBacklog?: boolean;
 };
@@ -37,6 +45,8 @@ export function SwimLane({
   avatarColor,
   avatarText,
   cards,
+  blockers,
+  viewer,
   isBacklog = false,
 }: SwimLaneProps) {
   const { isOver, setNodeRef } = useDroppable({ id: columnId });
@@ -85,7 +95,7 @@ export function SwimLane({
           ref={setNodeRef}
           className={"lane-body" + (isOver ? " drop-target" : "")}
         >
-          {cards.length === 0 && (
+          {cards.length === 0 && blockers.length === 0 && (
             <div className="empty-col" style={{ gridColumn: "1 / -1" }}>
               {isBacklog ? "— no unassigned tasks —" : "— no tasks —"}
             </div>
@@ -100,6 +110,9 @@ export function SwimLane({
                 <Card.Aging />
               </Card>
             </CardContextMenu>
+          ))}
+          {blockers.map((b) => (
+            <BlockerCard key={b.id} blocker={b} viewer={viewer} />
           ))}
         </div>
       </SortableContext>

@@ -16,7 +16,7 @@ import { trpc } from "@/lib/trpc/client";
 // would make dev hot-reload reconnects feel flaky.
 
 type NotifyPayload = {
-  type: "Card" | "Person" | "Contract";
+  type: "Card" | "Person" | "Contract" | "Blocker";
   op: "INSERT" | "UPDATE" | "DELETE";
   id: string;
 };
@@ -66,6 +66,17 @@ export function useRealtimeSync() {
             break;
           case "Contract":
             void utils.contracts.list.invalidate();
+            break;
+          case "Blocker":
+            // Drive the CM-column refresh on every blocker raise / ack /
+            // clear. Audit channel also picks it up (the Card update side
+            // of clear / raise fires the Card case above), but invalidating
+            // blockers.list here keeps the visual feedback under one round
+            // trip even when the underlying Card row didn't change (pure
+            // ack / unack flips just touch the Blocker row).
+            void utils.blockers.list.invalidate();
+            void utils.audit.unreadCount.invalidate();
+            void utils.audit.listForUser.invalidate();
             break;
         }
       };
